@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Tripex Pose</string>
+    <string name="tracking_channel_name">Odkrywanie świata</string>
+    <string name="tracking_channel_description">Powiadomienie aktywnego śledzenia lokalizacji</string>
+    <string name="tracking_notification_title">Odkrywasz świat</string>
+    <string name="tracking_notification_starting">Uruchamianie śledzenia…</string>
+    <string name="tracking_notification_unlocked">Odkryto %1$d nowych obszarów</string>
+    <string name="tracking_notification_stop">Zatrzymaj</string>
+    <string name="tracking_notification_permission_missing">Tracking zatrzymany — brak uprawnień</string>
+</resources>

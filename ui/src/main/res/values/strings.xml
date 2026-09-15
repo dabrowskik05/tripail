@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tracking_start">Rozpocznij odkrywanie</string>
+    <string name="tracking_stop">Zatrzymaj odkrywanie</string>
+    <string name="tracking_open_settings">Ustawienia aplikacji</string>
+    <string name="tracking_unlocked_count">Odblokowane heksy: %1$d</string>
+    <string name="tracking_status_idle">Gotowy do odkrywania</string>
+    <string name="tracking_status_active">Odkrywanie w toku</string>
+    <string name="tracking_status_permission">Brak uprawnień lokalizacji</string>
+    <string name="tracking_status_gps_off">GPS wyłączony</string>
+    <string name="status_precise_location_required">Wymagana dokładna lokalizacja — włącz Precise w ustawieniach aplikacji.</string>
+    <string name="status_permission_missing">Brak uprawnień do lokalizacji.</string>
+    <string name="status_location_disabled">Lokalizacja jest wyłączona w systemie.</string>
+    <string name="status_tracking_active">Śledzenie aktywne — mgła odsłania się wraz z trasą.</string>
+    <string name="search_label">Miasto</string>
+    <string name="search_placeholder">np. Warszawa</string>
+    <string name="search_submit">Szukaj</string>
+    <string name="search_working">…</string>
+    <string name="search_unlocked">Odblokowano %1$d heksów: %2$s</string>
+    <string name="search_not_found">Nie znaleziono miejsca</string>
+    <string name="search_attribution">Dane wyszukiwania © OpenStreetMap (Nominatim)</string>
+</resources>

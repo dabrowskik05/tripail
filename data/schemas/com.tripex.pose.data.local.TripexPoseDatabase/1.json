@@ -1,0 +1,84 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "26f4c88d3dc36b05f3f66ddaf8f0a142",
+    "entities": [
+      {
+        "tableName": "unlocked_hex",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`h3Index` INTEGER NOT NULL, `parentRes9` INTEGER NOT NULL, `parentRes7` INTEGER NOT NULL, `discoveredAt` INTEGER NOT NULL, `resolution` INTEGER NOT NULL, PRIMARY KEY(`h3Index`))",
+        "fields": [
+          {
+            "fieldPath": "h3Index",
+            "columnName": "h3Index",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "parentRes9",
+            "columnName": "parentRes9",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "parentRes7",
+            "columnName": "parentRes7",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "discoveredAt",
+            "columnName": "discoveredAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "resolution",
+            "columnName": "resolution",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "h3Index"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_unlocked_hex_parentRes9",
+            "unique": false,
+            "columnNames": [
+              "parentRes9"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_unlocked_hex_parentRes9` ON `${TABLE_NAME}` (`parentRes9`)"
+          },
+          {
+            "name": "index_unlocked_hex_parentRes7",
+            "unique": false,
+            "columnNames": [
+              "parentRes7"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_unlocked_hex_parentRes7` ON `${TABLE_NAME}` (`parentRes7`)"
+          },
+          {
+            "name": "index_unlocked_hex_discoveredAt",
+            "unique": false,
+            "columnNames": [
+              "discoveredAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_unlocked_hex_discoveredAt` ON `${TABLE_NAME}` (`discoveredAt`)"
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '26f4c88d3dc36b05f3f66ddaf8f0a142')"
+    ]
+  }
+}

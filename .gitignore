@@ -1,0 +1,33 @@
+# Built artifacts
+.gradle/
+build/
+**/build/
+
+# Local machine
+local.properties
+*.iml
+.idea/
+.DS_Store
+
+# Captures / profiling
+captures/
+*.hprof
+
+# Keystores
+*.jks
+*.keystore
+
+# Native
+.cxx/
+.externalNativeBuild/
+
+# IDE / OS
+*.swp
+*~
+.vscode/
+
+# Internal working docs & agent rules — not part of the public project
+CLAUDE.md
+.cursorrules
+.cursor/
+docs/internal/
