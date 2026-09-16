@@ -29,6 +29,9 @@ the more of the world you have actually walked.
   the fog in real time along your route.
 - **Unlock a city by name** — search for any place and uncover a radius around it, for the trips
   you took before installing the app.
+- **Cartoon shell UI** — branded loading screen (Fredoka), pill search, zoom controls and a
+  chunky FAB menu over the live MapLibre fog map; place details open in a bottom sheet after
+  a successful search.
 - **Zoom-aware rendering** — the fog geometry is simplified at low zoom levels, so a world view
   stays smooth even with tens of thousands of visited cells.
 - **Tiny footprint** — the entire history of everywhere you have been is a set of 64-bit integers.
@@ -92,6 +95,18 @@ Each screen owns a single contract file declaring its `State` (immutable, expose
 `StateFlow`), `Intent` (user and system input) and `Effect` (one-shot navigation and messages).
 Composables are stateless and take `state` + `onIntent`, which keeps them previewable.
 
+### UI shell (presentation)
+
+The app opens on a branded loading stage (`TripLoadingScreen`) hosted by `AppShellHost` —
+two stages (`Loading` → `Map`) switched with `AnimatedContent`, not a navigation back stack.
+Progress comes from real readiness signals (minimum splash time, map style URI, first Room
+emission), not a fake timer. After the logo exit animation the host shows `MapRoute` with the
+existing MapLibre fog map; chrome (search pill, zoom, FAB cluster, settings/community dialogs,
+place-detail sheet) lives in `:ui` only and never imports `:data`.
+
+Design tokens for the cartoon look (`CartoonStyle`, Fredoka typography, chunky 3D shadows) sit
+beside the existing fog style in `ui/theme/`. The map engine itself is unchanged.
+
 ## Tech stack
 
 | Concern | Choice |
@@ -142,8 +157,10 @@ the map looks plainer, but the fog, tracking and search all work. A free key fro
 ./gradlew installDebug      # install on a connected device or emulator
 ```
 
-On first launch the app asks for precise location permission, and on Android 13+ for notification
-permission as well — the tracking service runs in the foreground and needs a visible notification.
+On first launch the app shows the branded loading screen until style and local data are ready,
+then a **Załaduj** button flies the logo away into the map. It asks for precise location
+permission, and on Android 13+ for notification permission as well — the tracking service runs
+in the foreground and needs a visible notification.
 
 ### Tests and static analysis
 

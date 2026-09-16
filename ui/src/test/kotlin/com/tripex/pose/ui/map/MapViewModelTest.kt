@@ -115,7 +115,7 @@ class MapViewModelTest {
     }
 
     @Test
-    fun `SubmitSearch success sets Unlocked search message`() = runTest(testDispatcher) {
+    fun `SubmitSearch success opens PlaceDetail sheet`() = runTest(testDispatcher) {
         val place = Place("Warszawa", 52.23, 21.01)
         coEvery { unlockPlace(any()) } returns Result.success(
             UnlockPlaceResult(place = place, newlyUnlocked = 7),
@@ -129,13 +129,108 @@ class MapViewModelTest {
             skipItems(1) // query updated
             viewModel.onIntent(MapContract.Intent.SubmitSearch)
             advanceUntilIdle()
-            // StateFlow conflates isSearching=true → false; assert the settled result.
             val done = expectMostRecentItem()
             assertEquals(
-                MapContract.SearchMessage.Unlocked(count = 7, placeName = "Warszawa"),
-                done.searchMessage,
+                MapContract.PlaceDetail(
+                    name = "Warszawa",
+                    typeLabel = "",
+                    unlockedHexCount = 7,
+                ),
+                done.placeDetail,
             )
+            assertEquals(null, done.searchMessage)
             assertTrue(done.cameraTarget != null)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `ToggleFabMenu flips fabExpanded`() = runTest(testDispatcher) {
+        val viewModel = createViewModel()
+
+        viewModel.state.test {
+            skipItems(1)
+            viewModel.onIntent(MapContract.Intent.ToggleFabMenu)
+            advanceUntilIdle()
+            assertTrue(awaitItem().fabExpanded)
+            viewModel.onIntent(MapContract.Intent.ToggleFabMenu)
+            advanceUntilIdle()
+            assertEquals(false, awaitItem().fabExpanded)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `ZoomIn sets cameraTarget with higher zoom`() = runTest(testDispatcher) {
+        val viewModel = createViewModel()
+
+        viewModel.state.test {
+            skipItems(1)
+            viewModel.onIntent(MapContract.Intent.ZoomIn)
+            advanceUntilIdle()
+            val zoomed = awaitItem()
+            assertTrue(zoomed.cameraTarget != null)
+            assertEquals(13.0, zoomed.cameraTarget!!.zoom, 0.001)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `OpenSettings shows dialog and collapses FAB`() = runTest(testDispatcher) {
+        val viewModel = createViewModel()
+
+        viewModel.state.test {
+            skipItems(1)
+            viewModel.onIntent(MapContract.Intent.ToggleFabMenu)
+            advanceUntilIdle()
+            skipItems(1)
+            viewModel.onIntent(MapContract.Intent.OpenSettings)
+            advanceUntilIdle()
+            val opened = awaitItem()
+            assertTrue(opened.settingsVisible)
+            assertEquals(false, opened.fabExpanded)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `OpenCommunity shows dialog`() = runTest(testDispatcher) {
+        val viewModel = createViewModel()
+
+        viewModel.state.test {
+            skipItems(1)
+            viewModel.onIntent(MapContract.Intent.OpenCommunity)
+            advanceUntilIdle()
+            assertTrue(awaitItem().communityVisible)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `TogglePlaceDetailExpanded flips expanded flag`() = runTest(testDispatcher) {
+        val place = Place("Kraków", 50.06, 19.94)
+        coEvery { unlockPlace(any()) } returns Result.success(
+            UnlockPlaceResult(place = place, newlyUnlocked = 3),
+        )
+        val viewModel = createViewModel()
+
+        viewModel.state.test {
+            skipItems(1)
+            viewModel.onIntent(MapContract.Intent.SearchQueryChanged("Kraków"))
+            advanceUntilIdle()
+            skipItems(1)
+            viewModel.onIntent(MapContract.Intent.SubmitSearch)
+            advanceUntilIdle()
+            val opened = expectMostRecentItem()
+            assertTrue(opened.placeDetail != null)
+
+            viewModel.onIntent(MapContract.Intent.TogglePlaceDetailExpanded)
+            advanceUntilIdle()
+            assertTrue(expectMostRecentItem().placeDetail!!.expanded)
+
+            viewModel.onIntent(MapContract.Intent.DismissPlaceDetail)
+            advanceUntilIdle()
+            assertEquals(null, expectMostRecentItem().placeDetail)
             cancelAndIgnoreRemainingEvents()
         }
     }

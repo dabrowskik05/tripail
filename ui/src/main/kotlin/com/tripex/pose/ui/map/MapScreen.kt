@@ -3,30 +3,30 @@ package com.tripex.pose.ui.map
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.tripex.pose.domain.location.TrackingState
 import com.tripex.pose.ui.R
+import com.tripex.pose.ui.map.components.CommunityDialog
+import com.tripex.pose.ui.map.components.FloatingActionMenu
 import com.tripex.pose.ui.map.components.MapLibreFogMap
+import com.tripex.pose.ui.map.components.MapZoomControls
+import com.tripex.pose.ui.map.components.PlaceDetailSheet
+import com.tripex.pose.ui.map.components.SearchPill
+import com.tripex.pose.ui.map.components.SettingsDialog
 import com.tripex.pose.ui.theme.TripexPoseTheme
 
 @Composable
@@ -53,157 +53,147 @@ fun MapScreen(
             )
         }
 
-        Card(
+        Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
-                .padding(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
-            ),
+                .safeDrawingPadding()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Column(
-                modifier = Modifier.padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    OutlinedTextField(
-                        value = state.searchQuery,
-                        onValueChange = { onIntent(MapContract.Intent.SearchQueryChanged(it)) },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        enabled = !state.isSearching,
-                        label = { Text(stringResource(R.string.search_label)) },
-                        placeholder = { Text(stringResource(R.string.search_placeholder)) },
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(
-                            onSearch = {
-                                keyboard?.hide()
-                                onIntent(MapContract.Intent.SubmitSearch)
-                            },
-                        ),
-                    )
-                    Button(
-                        onClick = {
-                            keyboard?.hide()
-                            onIntent(MapContract.Intent.SubmitSearch)
-                        },
-                        enabled = !state.isSearching && state.searchQuery.isNotBlank(),
-                    ) {
-                        Text(
-                            if (state.isSearching) {
-                                stringResource(R.string.search_working)
-                            } else {
-                                stringResource(R.string.search_submit)
-                            },
-                        )
-                    }
-                }
-                state.searchMessage?.let { message ->
-                    Text(
-                        text = when (message) {
-                            is MapContract.SearchMessage.Unlocked -> stringResource(
-                                R.string.search_unlocked,
-                                message.count,
-                                message.placeName,
-                            )
-                            is MapContract.SearchMessage.Failed ->
-                                message.detail
-                                    ?: stringResource(R.string.search_not_found)
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+            SearchPill(
+                query = state.searchQuery,
+                isSearching = state.isSearching,
+                onQueryChange = { onIntent(MapContract.Intent.SearchQueryChanged(it)) },
+                onSubmit = {
+                    keyboard?.hide()
+                    onIntent(MapContract.Intent.SubmitSearch)
+                },
+                onSettingsClick = { onIntent(MapContract.Intent.OpenSettings) },
+            )
+            Text(
+                text = stringResource(R.string.search_attribution),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            state.searchMessage?.let { message ->
+                if (message is MapContract.SearchMessage.Failed) {
+                    StatusChip(
+                        text = message.detail
+                            ?: stringResource(R.string.search_not_found),
                     )
                 }
-                Text(
-                    text = stringResource(R.string.search_attribution),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+            }
+            state.statusMessage?.let { message ->
+                StatusChip(
+                    text = when (message) {
+                        MapContract.StatusMessage.PreciseLocationRequired ->
+                            stringResource(R.string.status_precise_location_required)
+                        MapContract.StatusMessage.PermissionMissing ->
+                            stringResource(R.string.status_permission_missing)
+                        MapContract.StatusMessage.LocationDisabled ->
+                            stringResource(R.string.status_location_disabled)
+                        MapContract.StatusMessage.TrackingActive ->
+                            stringResource(R.string.status_tracking_active)
+                    },
                 )
+            }
+            if (state.needsPreciseLocationHint ||
+                state.trackingState == TrackingState.PermissionMissing
+            ) {
+                TextButton(
+                    onClick = { onIntent(MapContract.Intent.OpenSettingsRequested) },
+                ) {
+                    Text(stringResource(R.string.tracking_open_settings))
+                }
             }
         }
 
-        Card(
+        MapZoomControls(
+            onZoomIn = { onIntent(MapContract.Intent.ZoomIn) },
+            onZoomOut = { onIntent(MapContract.Intent.ZoomOut) },
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
+                .align(Alignment.CenterStart)
+                .safeDrawingPadding()
+                .padding(start = 12.dp),
+        )
+
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .safeDrawingPadding()
                 .padding(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
-            ),
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+            Surface(
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
             ) {
                 Text(
                     text = stringResource(R.string.tracking_unlocked_count, state.unlockedCount),
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                 )
-                Text(
-                    text = when (state.trackingState) {
-                        TrackingState.Idle -> stringResource(R.string.tracking_status_idle)
-                        TrackingState.Tracking -> stringResource(R.string.tracking_status_active)
-                        TrackingState.PermissionMissing ->
-                            stringResource(R.string.tracking_status_permission)
-                        TrackingState.LocationDisabled ->
-                            stringResource(R.string.tracking_status_gps_off)
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                state.statusMessage?.let { message ->
-                    Text(
-                        text = when (message) {
-                            MapContract.StatusMessage.PreciseLocationRequired ->
-                                stringResource(R.string.status_precise_location_required)
-                            MapContract.StatusMessage.PermissionMissing ->
-                                stringResource(R.string.status_permission_missing)
-                            MapContract.StatusMessage.LocationDisabled ->
-                                stringResource(R.string.status_location_disabled)
-                            MapContract.StatusMessage.TrackingActive ->
-                                stringResource(R.string.status_tracking_active)
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    if (state.trackingState == TrackingState.Tracking) {
-                        Button(
-                            onClick = { onIntent(MapContract.Intent.StopDiscovery) },
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Text(stringResource(R.string.tracking_stop))
-                        }
-                    } else {
-                        Button(
-                            onClick = { onIntent(MapContract.Intent.StartDiscovery) },
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Text(stringResource(R.string.tracking_start))
-                        }
-                    }
-                    if (state.needsPreciseLocationHint ||
-                        state.trackingState == TrackingState.PermissionMissing
-                    ) {
-                        OutlinedButton(
-                            onClick = { onIntent(MapContract.Intent.OpenSettingsRequested) },
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Text(stringResource(R.string.tracking_open_settings))
-                        }
-                    }
-                }
             }
+            FloatingActionMenu(
+                expanded = state.fabExpanded,
+                isTracking = state.trackingState == TrackingState.Tracking,
+                onToggleExpanded = { onIntent(MapContract.Intent.ToggleFabMenu) },
+                onStartStopTracking = {
+                    if (state.trackingState == TrackingState.Tracking) {
+                        onIntent(MapContract.Intent.StopDiscovery)
+                    } else {
+                        onIntent(MapContract.Intent.StartDiscovery)
+                    }
+                },
+                onCommunityClick = { onIntent(MapContract.Intent.OpenCommunity) },
+                onSettingsClick = { onIntent(MapContract.Intent.OpenSettings) },
+            )
         }
+
+        state.placeDetail?.let { detail ->
+            PlaceDetailSheet(
+                detail = detail,
+                onDismiss = { onIntent(MapContract.Intent.DismissPlaceDetail) },
+                onToggleExpanded = { onIntent(MapContract.Intent.TogglePlaceDetailExpanded) },
+            )
+        }
+
+        if (state.settingsVisible) {
+            SettingsDialog(
+                onDismiss = { onIntent(MapContract.Intent.CloseSettings) },
+                onOpenSystemSettings = {
+                    onIntent(MapContract.Intent.CloseSettings)
+                    onIntent(MapContract.Intent.OpenSettingsRequested)
+                },
+            )
+        }
+
+        if (state.communityVisible) {
+            CommunityDialog(
+                onDismiss = { onIntent(MapContract.Intent.CloseCommunity) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatusChip(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+        )
     }
 }
 
@@ -217,6 +207,7 @@ private fun MapScreenPreview() {
                 unlockedCount = 42,
                 trackingState = TrackingState.Idle,
                 searchQuery = "Warszawa",
+                fabExpanded = true,
             ),
             onIntent = {},
         )

@@ -38,6 +38,7 @@ androidx-activity-compose = { module = "androidx.activity:activity-compose", ver
 
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "androidxComposeBom" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+androidx-compose-material-icons-core = { group = "androidx.compose.material", name = "material-icons-core" }
 androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
 androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
@@ -62,6 +63,8 @@ kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-t
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
 
 maplibre-android = { module = "org.maplibre.gl:android-sdk", version.ref = "maplibre" }
+# Runtime Android: :data vendors classes.jar + patched jniLibs until Uber ships >4.4.0 (libm fix).
+# Catalog entry kept so we can flip :data back to Maven in one line.
 h3-android = { module = "com.uber:h3-android", version.ref = "h3" }
 h3-jvm = { module = "com.uber:h3", version.ref = "h3" }
 

@@ -21,4 +21,24 @@
     <string name="search_attribution">Dane wyszukiwania © OpenStreetMap (Nominatim)</string>
     <string name="loading_enter">Załaduj</string>
     <string name="loading_progress_desc">Postęp ładowania: %1$d%%</string>
+    <string name="map_settings_cd">Ustawienia</string>
+    <string name="map_community_cd">Społeczność</string>
+    <string name="map_zoom_in_cd">Przybliż</string>
+    <string name="map_zoom_out_cd">Oddal</string>
+    <string name="map_fab_expand_cd">Pokaż akcje</string>
+    <string name="map_fab_collapse_cd">Ukryj akcje</string>
+    <string name="place_type_city">Miasto</string>
+    <string name="place_unlocked_hexes">Odblokowano %1$d heksów</string>
+    <string name="place_show_more">Pokaż więcej</string>
+    <string name="place_show_less">Pokaż mniej</string>
+    <string name="place_dismiss">Zamknij</string>
+    <string name="place_tag_unlocked">Odblokowane</string>
+    <string name="place_tag_search">Wyszukiwanie</string>
+    <string name="settings_title">Ustawienia</string>
+    <string name="settings_toggles_unavailable">Preferencje aplikacji pojawią się w kolejnej wersji. Na razie możesz otworzyć ustawienia systemowe.</string>
+    <string name="settings_fog_label">Animowana mgła</string>
+    <string name="settings_haptic_label">Wibracje</string>
+    <string name="community_title">Społeczność</string>
+    <string name="community_coming_soon">Już wkrótce — rankingi i wspólne odkrycia.</string>
+    <string name="dialog_close">Zamknij</string>
 </resources>

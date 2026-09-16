@@ -106,6 +106,47 @@ class MapViewModel @Inject constructor(
                     _effects.send(MapContract.Effect.OpenAppSettings)
                 }
             }
+            MapContract.Intent.ZoomIn -> adjustZoom(delta = 1.0)
+            MapContract.Intent.ZoomOut -> adjustZoom(delta = -1.0)
+            MapContract.Intent.ToggleFabMenu -> {
+                local.update { it.copy(fabExpanded = !it.fabExpanded) }
+            }
+            MapContract.Intent.OpenSettings -> {
+                local.update { it.copy(settingsVisible = true, fabExpanded = false) }
+            }
+            MapContract.Intent.CloseSettings -> {
+                local.update { it.copy(settingsVisible = false) }
+            }
+            MapContract.Intent.OpenCommunity -> {
+                local.update { it.copy(communityVisible = true, fabExpanded = false) }
+            }
+            MapContract.Intent.CloseCommunity -> {
+                local.update { it.copy(communityVisible = false) }
+            }
+            MapContract.Intent.DismissPlaceDetail -> {
+                local.update { it.copy(placeDetail = null) }
+            }
+            MapContract.Intent.TogglePlaceDetailExpanded -> {
+                local.update { state ->
+                    val detail = state.placeDetail ?: return@update state
+                    state.copy(placeDetail = detail.copy(expanded = !detail.expanded))
+                }
+            }
+        }
+    }
+
+    private fun adjustZoom(delta: Double) {
+        val current = viewport.value
+        val centerLat = (current.bounds.north + current.bounds.south) / 2.0
+        val centerLng = (current.bounds.east + current.bounds.west) / 2.0
+        local.update {
+            it.copy(
+                cameraTarget = MapContract.CameraTarget(
+                    latitude = centerLat,
+                    longitude = centerLng,
+                    zoom = (current.zoom + delta).coerceIn(MIN_ZOOM, MAX_ZOOM),
+                ),
+            )
         }
     }
 
@@ -120,9 +161,11 @@ class MapViewModel @Inject constructor(
                     local.update {
                         it.copy(
                             isSearching = false,
-                            searchMessage = MapContract.SearchMessage.Unlocked(
-                                count = unlocked.newlyUnlocked,
-                                placeName = unlocked.place.displayName,
+                            searchMessage = null,
+                            placeDetail = MapContract.PlaceDetail(
+                                name = unlocked.place.displayName,
+                                typeLabel = "",
+                                unlockedHexCount = unlocked.newlyUnlocked,
                             ),
                             cameraTarget = MapContract.CameraTarget(
                                 latitude = unlocked.place.latitude,
@@ -167,5 +210,10 @@ class MapViewModel @Inject constructor(
         tracking == TrackingState.LocationDisabled -> MapContract.StatusMessage.LocationDisabled
         tracking == TrackingState.Tracking -> MapContract.StatusMessage.TrackingActive
         else -> null
+    }
+
+    private companion object {
+        const val MIN_ZOOM = 2.0
+        const val MAX_ZOOM = 20.0
     }
 }

@@ -23,6 +23,17 @@ object MapContract {
         data class Failed(val detail: String?) : SearchMessage
     }
 
+    /**
+     * Detail for a place unlocked via search.
+     * No fake coverage % — only the real hex count from UnlockPlaceUseCase.
+     */
+    data class PlaceDetail(
+        val name: String,
+        val typeLabel: String,
+        val unlockedHexCount: Int,
+        val expanded: Boolean = false,
+    )
+
     data class State(
         val styleUri: String = "",
         val fogGeoJson: String = FogGeoJsonBuilder().emptyWorld(),
@@ -36,6 +47,10 @@ object MapContract {
         val isSearching: Boolean = false,
         val searchMessage: SearchMessage? = null,
         val cameraTarget: CameraTarget? = null,
+        val fabExpanded: Boolean = false,
+        val settingsVisible: Boolean = false,
+        val communityVisible: Boolean = false,
+        val placeDetail: PlaceDetail? = null,
     )
 
     sealed interface Intent {
@@ -51,6 +66,15 @@ object MapContract {
         data object SubmitSearch : Intent
         data object CameraTargetConsumed : Intent
         data object OpenSettingsRequested : Intent
+        data object ZoomIn : Intent
+        data object ZoomOut : Intent
+        data object ToggleFabMenu : Intent
+        data object OpenSettings : Intent
+        data object CloseSettings : Intent
+        data object OpenCommunity : Intent
+        data object CloseCommunity : Intent
+        data object DismissPlaceDetail : Intent
+        data object TogglePlaceDetailExpanded : Intent
     }
 
     sealed interface Effect {

@@ -26,6 +26,11 @@ android {
             "MAPTILER_API_KEY",
             "\"${localProperties.getProperty("MAPTILER_API_KEY", "")}\"",
         )
+        // h3-android ships only arm32/arm64 JNI; match that set so the linker
+        // never looks for an ABI the AAR does not contain.
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+        }
     }
 
     compileOptions {
@@ -35,6 +40,13 @@ android {
 
     buildFeatures {
         buildConfig = true
+    }
+
+    packaging {
+        jniLibs {
+            // Prefer the patched libh3-java.so if a Maven AAR ever reappears on the classpath.
+            pickFirsts += "**/libh3-java.so"
+        }
     }
 
     testOptions {
@@ -65,7 +77,13 @@ dependencies {
     implementation(libs.hilt.android)
     ksp(libs.hilt.android.compiler)
 
-    implementation(libs.h3.android)
+    // Maven `com.uber:h3-android:4.4.0` is broken on device: missing libm.so in DT_NEEDED
+    // (uber/h3-java#206; fix merged in PR #211, not released yet). We vendor:
+    //   - libs/h3-android-4.4.0-classes.jar  (Java API from the official AAR)
+    //   - src/main/jniLibs/*/libh3-java.so   (same natives + patchelf --add-needed libm.so)
+    // Flip back to libs.h3.android when Uber publishes a fixed release.
+    // AGP forbids local .aar deps in library modules, hence jar + jniLibs instead of a local AAR.
+    implementation(files("libs/h3-android-4.4.0-classes.jar"))
     implementation(libs.play.services.location)
 
     implementation(libs.retrofit)
