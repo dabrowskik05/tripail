@@ -10,9 +10,14 @@ fun TripexPoseTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {
-    CompositionLocalProvider(LocalFogStyle provides FogStyle()) {
+    CompositionLocalProvider(
+        LocalFogStyle provides FogStyle(),
+        LocalCartoonStyle provides CartoonStyle(),
+    ) {
         MaterialTheme(
             colorScheme = if (darkTheme) DarkColors else LightColors,
+            typography = TripexTypography,
+            shapes = TripexShapes,
             content = content,
         )
     }

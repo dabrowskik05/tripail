@@ -19,4 +19,6 @@
     <string name="search_unlocked">Odblokowano %1$d heksów: %2$s</string>
     <string name="search_not_found">Nie znaleziono miejsca</string>
     <string name="search_attribution">Dane wyszukiwania © OpenStreetMap (Nominatim)</string>
+    <string name="loading_enter">Załaduj</string>
+    <string name="loading_progress_desc">Postęp ładowania: %1$d%%</string>
 </resources>

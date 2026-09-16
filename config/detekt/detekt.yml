@@ -2,12 +2,6 @@ config:
   validation: true
   warningsAsErrors: false
 
-formatting:
-  active: true
-  MaximumLineLength:
-    active: true
-    maxLineLength: 120
-
 style:
   MaxLineLength:
     active: true
