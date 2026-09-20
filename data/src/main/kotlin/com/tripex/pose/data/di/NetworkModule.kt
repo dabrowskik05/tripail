@@ -33,7 +33,7 @@ internal object NetworkModule {
     @Singleton
     fun provideOkHttpClient(): OkHttpClient {
         val userAgentValue =
-            "TripexPose/${BuildConfig.VERSION_NAME} (Android; portfolio MVP; contact: tripex.pose@gmail.com)"
+            "Tripail/${BuildConfig.VERSION_NAME} (Android; portfolio MVP; contact: tripex.pose@gmail.com)"
         val userAgent = Interceptor { chain ->
             chain.proceed(
                 chain.request().newBuilder()

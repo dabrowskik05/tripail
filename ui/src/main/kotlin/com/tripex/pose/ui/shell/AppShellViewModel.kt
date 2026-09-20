@@ -2,8 +2,10 @@ package com.tripex.pose.ui.shell
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.tripex.pose.domain.geo.ContinentBounds
 import com.tripex.pose.domain.map.MapStyleProvider
 import com.tripex.pose.domain.usecase.ObserveUnlockedCountUseCase
+import com.tripex.pose.ui.map.MapContract
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.delay
@@ -15,6 +17,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 
 @HiltViewModel
 class AppShellViewModel @Inject constructor(
@@ -25,8 +28,8 @@ class AppShellViewModel @Inject constructor(
     private val stage = MutableStateFlow<AppShellContract.Stage>(
         AppShellContract.Stage.Loading,
     )
+    private val mapCameraTarget = MutableStateFlow<MapContract.CameraTarget?>(null)
 
-    /** Minimalny czas pokazania brandingu — inaczej ekran mignie. */
     private val minimumElapsed = flow {
         emit(false)
         delay(MIN_SPLASH_MILLIS)
@@ -37,7 +40,6 @@ class AppShellViewModel @Inject constructor(
         emit(mapStyleProvider.styleUri().isNotEmpty())
     }
 
-    /** Pierwsza emisja z Room = warstwa danych odpowiada. */
     private val dataReady = observeUnlockedCount()
         .map { true }
         .onStart { emit(false) }
@@ -47,13 +49,15 @@ class AppShellViewModel @Inject constructor(
         minimumElapsed,
         styleReady,
         dataReady,
-    ) { currentStage, elapsed, style, data ->
+        mapCameraTarget,
+    ) { currentStage, elapsed, style, data, camera ->
         val signals = listOf(elapsed, style, data)
         val ready = signals.all { it }
         AppShellContract.State(
             stage = currentStage,
             progress = signals.count { it } / signals.size.toFloat(),
             isReady = ready,
+            mapCameraTarget = camera,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -63,8 +67,24 @@ class AppShellViewModel @Inject constructor(
 
     fun onIntent(intent: AppShellContract.Intent) {
         when (intent) {
-            AppShellContract.Intent.EnterMapRequested ->
+            AppShellContract.Intent.EnterContinentsRequested ->
+                stage.value = AppShellContract.Stage.Continents
+            is AppShellContract.Intent.OpenMap -> {
+                val bounds = ContinentBounds.region(intent.continentId).bounds
+                val (lat, lng) = ContinentBounds.center(bounds)
+                mapCameraTarget.value = MapContract.CameraTarget(
+                    latitude = lat,
+                    longitude = lng,
+                    zoom = ContinentBounds.MAP_OVERVIEW_ZOOM,
+                )
                 stage.value = AppShellContract.Stage.Map
+            }
+            AppShellContract.Intent.BackToContinents -> {
+                mapCameraTarget.value = null
+                stage.value = AppShellContract.Stage.Continents
+            }
+            AppShellContract.Intent.MapCameraConsumed ->
+                mapCameraTarget.update { null }
         }
     }
 

@@ -20,9 +20,15 @@ internal abstract class H3Module {
 
     companion object {
         /**
-         * Android ships natives as jniLibs inside the AAR (`System.loadLibrary`).
-         * [H3Core.newInstance] looks for classpath resources (`/android-arm64/...`) and
-         * fails on device with UnsatisfiedLinkError — use [H3Core.newSystemInstance].
+         * Must use [H3Core.newSystemInstance] on Android.
+         *
+         * [H3Core.newInstance] unpacks `/android-arm64/libh3-java.so` from the JAR via
+         * [ClassLoader.getResourceAsStream]. Modern AGP strips those embedded `.so`
+         * resources from the APK, which yields:
+         * `UnsatisfiedLinkError: No native resource found at /android-arm64/libh3-java.so`.
+         *
+         * `newSystemInstance` calls `System.loadLibrary("h3-java")`, which loads
+         * `lib/arm64-v8a/libh3-java.so` from `:app` jniLibs / the h3-android AAR.
          */
         @Provides
         @Singleton

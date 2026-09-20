@@ -17,6 +17,7 @@ data class CartoonStyle(
     val accentOrange: Color = Color(0xFFFF8A5B),
     val sunYellowShadow: Color = Color(0xFFD9A52F),
     val grassGreen: Color = Color(0xFF58C97A),
+    val paperBg: Color = Color(0xFFF6F4EE),
     val chunkyShadowOffset: Dp = 6.dp,
     val continentColors: List<Color> = listOf(
         Color(0xFF9AA5B1),

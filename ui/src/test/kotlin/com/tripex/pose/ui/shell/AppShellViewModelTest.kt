@@ -1,6 +1,7 @@
 package com.tripex.pose.ui.shell
 
 import app.cash.turbine.test
+import com.tripex.pose.domain.geo.ContinentId
 import com.tripex.pose.domain.map.MapStyleProvider
 import com.tripex.pose.domain.usecase.ObserveUnlockedCountUseCase
 import io.mockk.every
@@ -17,6 +18,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -54,7 +56,6 @@ class AppShellViewModelTest {
         val viewModel = createViewModel()
 
         viewModel.state.test {
-            // style + data bez domknięcia delay splasha
             runCurrent()
             val partial = expectMostRecentItem()
             assertEquals(AppShellContract.Stage.Loading, partial.stage)
@@ -71,7 +72,7 @@ class AppShellViewModelTest {
     }
 
     @Test
-    fun `EnterMapRequested switches stage to Map`() = runTest(testDispatcher) {
+    fun `EnterContinentsRequested switches stage to Continents`() = runTest(testDispatcher) {
         val viewModel = createViewModel()
 
         viewModel.state.test {
@@ -79,9 +80,39 @@ class AppShellViewModelTest {
             runCurrent()
             assertEquals(AppShellContract.Stage.Loading, expectMostRecentItem().stage)
 
-            viewModel.onIntent(AppShellContract.Intent.EnterMapRequested)
+            viewModel.onIntent(AppShellContract.Intent.EnterContinentsRequested)
             runCurrent()
-            assertEquals(AppShellContract.Stage.Map, expectMostRecentItem().stage)
+            assertEquals(AppShellContract.Stage.Continents, expectMostRecentItem().stage)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `OpenMap switches to Map with camera target`() = runTest(testDispatcher) {
+        val viewModel = createViewModel()
+
+        viewModel.state.test {
+            viewModel.onIntent(AppShellContract.Intent.EnterContinentsRequested)
+            runCurrent()
+            viewModel.onIntent(AppShellContract.Intent.OpenMap(ContinentId.Europe))
+            runCurrent()
+            val mapState = expectMostRecentItem()
+            assertEquals(AppShellContract.Stage.Map, mapState.stage)
+            assertNotNull(mapState.mapCameraTarget)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `BackToContinents returns from Map`() = runTest(testDispatcher) {
+        val viewModel = createViewModel()
+
+        viewModel.state.test {
+            viewModel.onIntent(AppShellContract.Intent.OpenMap(ContinentId.Africa))
+            runCurrent()
+            viewModel.onIntent(AppShellContract.Intent.BackToContinents)
+            runCurrent()
+            assertEquals(AppShellContract.Stage.Continents, expectMostRecentItem().stage)
             cancelAndIgnoreRemainingEvents()
         }
     }

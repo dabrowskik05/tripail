@@ -75,6 +75,7 @@ object MapContract {
         data object CloseCommunity : Intent
         data object DismissPlaceDetail : Intent
         data object TogglePlaceDetailExpanded : Intent
+        data class FocusCamera(val target: CameraTarget) : Intent
     }
 
     sealed interface Effect {

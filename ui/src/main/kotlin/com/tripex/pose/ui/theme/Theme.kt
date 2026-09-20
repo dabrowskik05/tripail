@@ -6,12 +6,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 
 @Composable
-fun TripexPoseTheme(
+fun TripailTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {
     CompositionLocalProvider(
-        LocalFogStyle provides FogStyle(),
+        LocalRevealStyle provides RevealStyle(),
         LocalCartoonStyle provides CartoonStyle(),
     ) {
         MaterialTheme(

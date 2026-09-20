@@ -16,7 +16,8 @@ android {
         versionCode = 1
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        // Align with h3-android JNI ABIs (and :data ndk.abiFilters).
+        // h3-android ships only these ABIs — keep the APK aligned so System.loadLibrary
+        // always resolves libh3-java.so on physical ARM devices.
         ndk {
             abiFilters += listOf("armeabi-v7a", "arm64-v8a")
         }
@@ -43,12 +44,28 @@ android {
         buildConfig = true
     }
 
+    sourceSets {
+        getByName("main") {
+            // Explicit: patched Uber H3 natives for arm32/arm64 (see src/main/jniLibs/).
+            jniLibs.srcDirs("src/main/jniLibs")
+        }
+    }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            // AGP otherwise strips jar-embedded *.so (android-arm64/…) used by H3Core.newInstance.
+            // We load via System.loadLibrary + jniLibs; keep pickFirst so merge never fails.
+            pickFirsts += "**/android-arm64/libh3-java.so"
+            pickFirsts += "**/android-arm/libh3-java.so"
         }
         jniLibs {
+            // Extract .so to the filesystem — more reliable than in-APK mmap on some devices.
+            useLegacyPackaging = true
+            // Prefer :app/src/main/jniLibs (libm-patched) over the stock AAR copies.
             pickFirsts += "**/libh3-java.so"
+            pickFirsts += "lib/arm64-v8a/libh3-java.so"
+            pickFirsts += "lib/armeabi-v7a/libh3-java.so"
         }
     }
 }
@@ -72,6 +89,10 @@ dependencies {
     implementation(libs.androidx.compose.material3)
 
     implementation(libs.maplibre.android)
+
+    // Direct app dependency so the Android AAR’s jni/ tree is always on the merge classpath.
+    // Runtime load uses H3Core.newSystemInstance() + :app jniLibs (patched libm).
+    implementation(libs.h3.android)
 
     implementation(libs.hilt.android)
     ksp(libs.hilt.android.compiler)

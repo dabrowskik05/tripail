@@ -4,6 +4,6 @@ import androidx.compose.runtime.Composable
 import com.tripex.pose.ui.shell.AppShellHost
 
 @Composable
-fun TripexPoseApp() {
+fun TripailApp() {
     AppShellHost()
 }

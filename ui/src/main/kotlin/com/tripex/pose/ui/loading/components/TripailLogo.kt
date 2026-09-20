@@ -1,7 +1,6 @@
 package com.tripex.pose.ui.loading.components
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -13,11 +12,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.tripex.pose.ui.theme.LocalCartoonStyle
 
 @Composable
-internal fun TripexLogo(
+internal fun TripailLogo(
     modifier: Modifier = Modifier,
 ) {
     val cartoon = LocalCartoonStyle.current
@@ -38,23 +36,13 @@ internal fun TripexLogo(
             ),
             color = cartoon.inkPrimary,
         )
-        Column(
-            modifier = Modifier.padding(start = 4.dp, top = 8.dp),
-            horizontalAlignment = Alignment.Start,
-        ) {
-            Text(
-                text = "ex",
-                style = MaterialTheme.typography.titleLarge,
-                color = cartoon.accentPink,
+        Text(
+            text = "ail",
+            style = MaterialTheme.typography.displayLarge.copy(
                 fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                text = "pose",
-                style = MaterialTheme.typography.titleLarge,
-                color = cartoon.inkPrimary.copy(alpha = 0.65f),
-                letterSpacing = 2.sp,
-                modifier = Modifier.padding(top = (-4).dp),
-            )
-        }
+            ),
+            color = cartoon.accentPink,
+            modifier = Modifier.padding(start = 2.dp),
+        )
     }
 }

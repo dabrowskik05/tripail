@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.tripex.pose.ui.continent.ContinentMapRoute
 import com.tripex.pose.ui.loading.TripLoadingScreen
 import com.tripex.pose.ui.map.MapRoute
 
@@ -31,10 +32,23 @@ fun AppShellHost(
                 progress = state.progress,
                 isReady = state.isReady,
                 onEnterRequested = {
-                    viewModel.onIntent(AppShellContract.Intent.EnterMapRequested)
+                    viewModel.onIntent(AppShellContract.Intent.EnterContinentsRequested)
                 },
             )
-            AppShellContract.Stage.Map -> MapRoute()
+            AppShellContract.Stage.Continents -> ContinentMapRoute(
+                onOpenMap = { continentId ->
+                    viewModel.onIntent(AppShellContract.Intent.OpenMap(continentId))
+                },
+            )
+            AppShellContract.Stage.Map -> MapRoute(
+                initialCameraTarget = state.mapCameraTarget,
+                onBackToContinents = {
+                    viewModel.onIntent(AppShellContract.Intent.BackToContinents)
+                },
+                onInitialCameraConsumed = {
+                    viewModel.onIntent(AppShellContract.Intent.MapCameraConsumed)
+                },
+            )
         }
     }
 }

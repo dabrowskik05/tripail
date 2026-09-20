@@ -35,7 +35,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.tripex.pose.ui.R
 import com.tripex.pose.ui.theme.LocalCartoonStyle
-import com.tripex.pose.ui.theme.TripexPoseTheme
+import com.tripex.pose.ui.theme.TripailTheme
 import com.tripex.pose.ui.theme.chunkyShadow
 
 @Composable
@@ -161,7 +161,7 @@ fun FloatingActionMenu(
 @Preview(showBackground = true, backgroundColor = 0xFF8FD4EA)
 @Composable
 private fun FloatingActionMenuCollapsedPreview() {
-    TripexPoseTheme {
+    TripailTheme {
         FloatingActionMenu(
             expanded = false,
             isTracking = false,
@@ -177,7 +177,7 @@ private fun FloatingActionMenuCollapsedPreview() {
 @Preview(showBackground = true, backgroundColor = 0xFF8FD4EA)
 @Composable
 private fun FloatingActionMenuExpandedPreview() {
-    TripexPoseTheme {
+    TripailTheme {
         FloatingActionMenu(
             expanded = true,
             isTracking = true,

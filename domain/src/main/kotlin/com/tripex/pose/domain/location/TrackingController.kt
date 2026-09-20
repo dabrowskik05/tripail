@@ -6,5 +6,6 @@ package com.tripex.pose.domain.location
  */
 interface TrackingController {
     fun startTracking()
+
     fun stopTracking()
 }

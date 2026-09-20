@@ -10,22 +10,25 @@ import javax.inject.Inject
  *
  * @return number of **newly** unlocked cells (for notification copy).
  */
-class UnlockAreaUseCase @Inject constructor(
-    private val h3: H3Converter,
-    private val repository: UnlockedAreaRepository,
-) {
-    suspend operator fun invoke(
-        location: DomainLocation,
-        previous: DomainLocation?,
-    ): Int {
-        val disk = h3.revealDisk(location.latitude, location.longitude)
-        val cells = if (previous == null) {
-            disk
-        } else {
-            val from = h3.cellAt(previous.latitude, previous.longitude)
-            val to = h3.cellAt(location.latitude, location.longitude)
-            disk + h3.bridge(from, to)
+class UnlockAreaUseCase
+    @Inject
+    constructor(
+        private val h3: H3Converter,
+        private val repository: UnlockedAreaRepository,
+    ) {
+        suspend operator fun invoke(
+            location: DomainLocation,
+            previous: DomainLocation?,
+        ): Int {
+            val disk = h3.revealDisk(location.latitude, location.longitude)
+            val cells =
+                if (previous == null) {
+                    disk
+                } else {
+                    val from = h3.cellAt(previous.latitude, previous.longitude)
+                    val to = h3.cellAt(location.latitude, location.longitude)
+                    disk + h3.bridge(from, to)
+                }
+            return repository.unlock(cells)
         }
-        return repository.unlock(cells)
     }
-}

@@ -5,7 +5,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FogGeoJsonBuilderTest {
-
     private val builder = FogGeoJsonBuilder()
 
     @Test
@@ -20,13 +19,14 @@ class FogGeoJsonBuilderTest {
 
     @Test
     fun `unlocked outer ring becomes a hole in world fog`() {
-        val hole = listOf(
-            21.0 to 52.0,
-            21.1 to 52.0,
-            21.1 to 52.1,
-            21.0 to 52.1,
-            21.0 to 52.0,
-        )
+        val hole =
+            listOf(
+                21.0 to 52.0,
+                21.1 to 52.0,
+                21.1 to 52.1,
+                21.0 to 52.1,
+                21.0 to 52.0,
+            )
         val json = builder.build(FogGeometry(listOf(listOf(hole))))
         assertTrue(json.contains("21.0,52.0"))
         assertTrue(json.indexOf("21.0") > json.indexOf("-180.0"))
@@ -34,20 +34,22 @@ class FogGeoJsonBuilderTest {
 
     @Test
     fun `inner ring becomes a separate fog island feature`() {
-        val outer = listOf(
-            21.0 to 52.0,
-            21.2 to 52.0,
-            21.2 to 52.2,
-            21.0 to 52.2,
-            21.0 to 52.0,
-        )
-        val inner = listOf(
-            21.05 to 52.05,
-            21.15 to 52.05,
-            21.15 to 52.15,
-            21.05 to 52.15,
-            21.05 to 52.05,
-        )
+        val outer =
+            listOf(
+                21.0 to 52.0,
+                21.2 to 52.0,
+                21.2 to 52.2,
+                21.0 to 52.2,
+                21.0 to 52.0,
+            )
+        val inner =
+            listOf(
+                21.05 to 52.05,
+                21.15 to 52.05,
+                21.15 to 52.15,
+                21.05 to 52.15,
+                21.05 to 52.05,
+            )
         val json = builder.build(FogGeometry(listOf(listOf(outer, inner))))
         // Two features: world+hole and island
         val featureCount = "\"type\":\"Feature\"".toRegex().findAll(json).count()

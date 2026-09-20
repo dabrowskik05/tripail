@@ -5,7 +5,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LocationFilterTest {
-
     private val filter = LocationFilter()
     private val now = 60_000_000_000L // 60s in nanos
 
@@ -76,11 +75,12 @@ class LocationFilterTest {
         accuracy: Float = 10f,
         elapsed: Long = now - 1_000_000_000L,
         isMock: Boolean = false,
-    ): DomainLocation = DomainLocation(
-        latitude = lat,
-        longitude = lng,
-        accuracyMeters = accuracy,
-        elapsedRealtimeNanos = elapsed,
-        isMock = isMock,
-    )
+    ): DomainLocation =
+        DomainLocation(
+            latitude = lat,
+            longitude = lng,
+            accuracyMeters = accuracy,
+            elapsedRealtimeNanos = elapsed,
+            isMock = isMock,
+        )
 }

@@ -27,7 +27,7 @@ import com.tripex.pose.ui.map.components.MapZoomControls
 import com.tripex.pose.ui.map.components.PlaceDetailSheet
 import com.tripex.pose.ui.map.components.SearchPill
 import com.tripex.pose.ui.map.components.SettingsDialog
-import com.tripex.pose.ui.theme.TripexPoseTheme
+import com.tripex.pose.ui.theme.TripailTheme
 
 @Composable
 fun MapScreen(
@@ -200,7 +200,7 @@ private fun StatusChip(
 @Preview(showBackground = true)
 @Composable
 private fun MapScreenPreview() {
-    TripexPoseTheme {
+    TripailTheme {
         MapScreen(
             state = MapContract.State(
                 styleUri = "preview",

@@ -6,7 +6,6 @@ import kotlinx.coroutines.flow.Flow
  * Persistence boundary for unlocked H3 cells.
  */
 interface UnlockedAreaRepository {
-
     /**
      * Insert cells; re-walking an existing index is a no-op.
      * @return count of rows actually inserted (conflicts ignored).

@@ -11,7 +11,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.tripex.pose.ui.R
-import com.tripex.pose.ui.theme.TripexPoseTheme
+import com.tripex.pose.ui.theme.TripailTheme
 
 @Composable
 fun CommunityDialog(
@@ -45,7 +45,7 @@ fun CommunityDialog(
 @Preview
 @Composable
 private fun CommunityDialogPreview() {
-    TripexPoseTheme {
+    TripailTheme {
         CommunityDialog(onDismiss = {})
     }
 }

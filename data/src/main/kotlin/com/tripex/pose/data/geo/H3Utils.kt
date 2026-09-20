@@ -22,6 +22,11 @@ internal class H3Utils @Inject constructor(
     override fun cellAt(lat: Double, lng: Double): Long =
         h3.latLngToCell(lat, lng, baseResolution)
 
+    override fun cellCenter(cell: Long): Pair<Double, Double> {
+        val latLng = h3.cellToLatLng(cell)
+        return latLng.lat to latLng.lng
+    }
+
     override fun revealDisk(lat: Double, lng: Double, k: Int): Set<Long> {
         require(k in 0..3) { "k out of sane range: $k" }
         return h3.gridDisk(cellAt(lat, lng), k).toSet()

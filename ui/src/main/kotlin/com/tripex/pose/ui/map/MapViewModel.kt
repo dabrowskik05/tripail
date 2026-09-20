@@ -132,6 +132,9 @@ class MapViewModel @Inject constructor(
                     state.copy(placeDetail = detail.copy(expanded = !detail.expanded))
                 }
             }
+            is MapContract.Intent.FocusCamera -> {
+                local.update { it.copy(cameraTarget = intent.target) }
+            }
         }
     }
 

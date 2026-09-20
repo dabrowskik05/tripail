@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Tripex Pose</string>
+    <string name="app_name">Tripail</string>
     <string name="tracking_channel_name">Odkrywanie świata</string>
     <string name="tracking_channel_description">Powiadomienie aktywnego śledzenia lokalizacji</string>
     <string name="tracking_notification_title">Odkrywasz świat</string>

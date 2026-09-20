@@ -23,10 +23,10 @@ import androidx.compose.ui.util.lerp
 import com.tripex.pose.ui.R
 import com.tripex.pose.ui.components.ChunkyButton
 import com.tripex.pose.ui.loading.components.StripedProgressBar
-import com.tripex.pose.ui.loading.components.TripexLogo
+import com.tripex.pose.ui.loading.components.TripailLogo
 import com.tripex.pose.ui.loading.components.WavePatternBackground
 import com.tripex.pose.ui.theme.LocalCartoonStyle
-import com.tripex.pose.ui.theme.TripexPoseTheme
+import com.tripex.pose.ui.theme.TripailTheme
 import kotlinx.coroutines.launch
 
 @Composable
@@ -47,7 +47,7 @@ fun TripLoadingScreen(
     ) {
         WavePatternBackground(modifier = Modifier.fillMaxSize())
 
-        TripexLogo(
+        TripailLogo(
             modifier = Modifier
                 .align(Alignment.Center)
                 .graphicsLayer {
@@ -95,7 +95,7 @@ fun TripLoadingScreen(
 @Preview(name = "Loading — in progress")
 @Composable
 private fun TripLoadingScreenInProgressPreview() {
-    TripexPoseTheme {
+    TripailTheme {
         TripLoadingScreen(
             progress = 0.4f,
             isReady = false,
@@ -107,7 +107,7 @@ private fun TripLoadingScreenInProgressPreview() {
 @Preview(name = "Loading — ready")
 @Composable
 private fun TripLoadingScreenReadyPreview() {
-    TripexPoseTheme {
+    TripailTheme {
         TripLoadingScreen(
             progress = 1f,
             isReady = true,

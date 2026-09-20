@@ -9,19 +9,24 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class ObserveUnlockedCountUseCaseTest {
-
     @Test
-    fun `delegates to repository observeCount`() = runTest {
-        val repo = object : UnlockedAreaRepository {
-            override suspend fun unlock(hexes: Set<Long>): Int = 0
-            override fun observeDetailed(viewportCells: Set<Long>): Flow<List<Long>> = flowOf(emptyList())
-            override fun observeMid(viewportCells: Set<Long>): Flow<List<Long>> = flowOf(emptyList())
-            override fun observeFar(): Flow<List<Long>> = flowOf(emptyList())
-            override fun observeCount(): Flow<Int> = flowOf(42)
+    fun `delegates to repository observeCount`() =
+        runTest {
+            val repo =
+                object : UnlockedAreaRepository {
+                    override suspend fun unlock(hexes: Set<Long>): Int = 0
+
+                    override fun observeDetailed(viewportCells: Set<Long>): Flow<List<Long>> = flowOf(emptyList())
+
+                    override fun observeMid(viewportCells: Set<Long>): Flow<List<Long>> = flowOf(emptyList())
+
+                    override fun observeFar(): Flow<List<Long>> = flowOf(emptyList())
+
+                    override fun observeCount(): Flow<Int> = flowOf(42)
+                }
+
+            val emissions = ObserveUnlockedCountUseCase(repo)().toList()
+
+            assertEquals(listOf(42), emissions)
         }
-
-        val emissions = ObserveUnlockedCountUseCase(repo)().toList()
-
-        assertEquals(listOf(42), emissions)
-    }
 }

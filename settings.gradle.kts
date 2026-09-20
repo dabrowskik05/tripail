@@ -20,7 +20,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "TripexPose"
+rootProject.name = "Tripail"
 
 include(":app")
 include(":core")

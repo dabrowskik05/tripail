@@ -63,6 +63,7 @@ class UnlockedAreaRepositoryImplTest {
     private class FakeH3 : H3Converter {
         override val baseResolution: Int = H3Config.WALKING_RESOLUTION
         override fun cellAt(lat: Double, lng: Double): Long = 0L
+        override fun cellCenter(cell: Long): Pair<Double, Double> = 0.0 to 0.0
         override fun revealDisk(lat: Double, lng: Double, k: Int): Set<Long> = emptySet()
         override fun revealAround(lat: Double, lng: Double, radiusMeters: Double): Set<Long> = emptySet()
         override fun bridge(from: Long, to: Long): Set<Long> = emptySet()

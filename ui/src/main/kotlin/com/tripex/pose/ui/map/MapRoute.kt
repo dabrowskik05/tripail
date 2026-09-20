@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
@@ -19,10 +20,21 @@ import kotlinx.coroutines.flow.collectLatest
 
 @Composable
 fun MapRoute(
+    initialCameraTarget: MapContract.CameraTarget? = null,
+    onBackToContinents: () -> Unit = {},
+    onInitialCameraConsumed: () -> Unit = {},
     viewModel: MapViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+
+    BackHandler(onBack = onBackToContinents)
+
+    LaunchedEffect(initialCameraTarget) {
+        val target = initialCameraTarget ?: return@LaunchedEffect
+        viewModel.onIntent(MapContract.Intent.FocusCamera(target))
+        onInitialCameraConsumed()
+    }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),

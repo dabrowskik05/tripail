@@ -41,4 +41,15 @@
     <string name="community_title">Społeczność</string>
     <string name="community_coming_soon">Już wkrótce — rankingi i wspólne odkrycia.</string>
     <string name="dialog_close">Zamknij</string>
+    <string name="continent_world_title">Twój świat</string>
+    <string name="continent_hint">Dotknij kontynentu, by zobaczyć postęp odkrycia</string>
+    <string name="continent_coverage">Odkryte: %1$d%%</string>
+    <string name="continent_explore">Odkrywaj mapę</string>
+    <string name="continent_north_america">Ameryka Północna</string>
+    <string name="continent_south_america">Ameryka Południowa</string>
+    <string name="continent_europe">Europa</string>
+    <string name="continent_africa">Afryka</string>
+    <string name="continent_asia">Azja</string>
+    <string name="continent_oceania">Australia i Oceania</string>
+    <string name="continent_antarctica">Antarktyda</string>
 </resources>

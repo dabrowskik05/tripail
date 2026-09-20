@@ -17,7 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.tripex.pose.ui.theme.LocalCartoonStyle
-import com.tripex.pose.ui.theme.TripexPoseTheme
+import com.tripex.pose.ui.theme.TripailTheme
 import com.tripex.pose.ui.theme.chunkyShadow
 
 @Composable
@@ -59,7 +59,7 @@ fun ChunkyButton(
 @Preview(name = "ChunkyButton — normal")
 @Composable
 private fun ChunkyButtonNormalPreview() {
-    TripexPoseTheme {
+    TripailTheme {
         ChunkyButton(text = "Załaduj", onClick = {})
     }
 }
@@ -67,7 +67,7 @@ private fun ChunkyButtonNormalPreview() {
 @Preview(name = "ChunkyButton — disabled")
 @Composable
 private fun ChunkyButtonDisabledPreview() {
-    TripexPoseTheme {
+    TripailTheme {
         ChunkyButton(text = "Załaduj", onClick = {}, enabled = false)
     }
 }

@@ -15,23 +15,25 @@ data class UnlockPlaceResult(
 /**
  * Geocodes a place name and unlocks ~[H3Config.MANUAL_UNLOCK_RADIUS_M] around it.
  */
-class UnlockPlaceUseCase @Inject constructor(
-    private val geocodingRepository: GeocodingRepository,
-    private val h3: H3Converter,
-    private val unlockedAreaRepository: UnlockedAreaRepository,
-) {
-    suspend operator fun invoke(
-        query: String,
-        radiusMeters: Double = H3Config.MANUAL_UNLOCK_RADIUS_M,
-    ): Result<UnlockPlaceResult> {
-        val trimmed = query.trim()
-        if (trimmed.isEmpty()) {
-            return Result.failure(IllegalArgumentException("Empty query"))
-        }
-        return geocodingRepository.search(trimmed).mapCatching { place ->
-            val cells = h3.revealAround(place.latitude, place.longitude, radiusMeters)
-            val newlyUnlocked = unlockedAreaRepository.unlock(cells)
-            UnlockPlaceResult(place = place, newlyUnlocked = newlyUnlocked)
+class UnlockPlaceUseCase
+    @Inject
+    constructor(
+        private val geocodingRepository: GeocodingRepository,
+        private val h3: H3Converter,
+        private val unlockedAreaRepository: UnlockedAreaRepository,
+    ) {
+        suspend operator fun invoke(
+            query: String,
+            radiusMeters: Double = H3Config.MANUAL_UNLOCK_RADIUS_M,
+        ): Result<UnlockPlaceResult> {
+            val trimmed = query.trim()
+            if (trimmed.isEmpty()) {
+                return Result.failure(IllegalArgumentException("Empty query"))
+            }
+            return geocodingRepository.search(trimmed).mapCatching { place ->
+                val cells = h3.revealAround(place.latitude, place.longitude, radiusMeters)
+                val newlyUnlocked = unlockedAreaRepository.unlock(cells)
+                UnlockPlaceResult(place = place, newlyUnlocked = newlyUnlocked)
+            }
         }
     }
-}

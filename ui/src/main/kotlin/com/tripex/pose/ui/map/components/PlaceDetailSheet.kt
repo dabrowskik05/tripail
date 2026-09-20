@@ -29,7 +29,7 @@ import com.tripex.pose.ui.R
 import com.tripex.pose.ui.components.ChunkyButton
 import com.tripex.pose.ui.map.MapContract
 import com.tripex.pose.ui.theme.LocalCartoonStyle
-import com.tripex.pose.ui.theme.TripexPoseTheme
+import com.tripex.pose.ui.theme.TripailTheme
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -135,7 +135,7 @@ fun PlaceDetailSheet(
 @Preview
 @Composable
 private fun PlaceDetailSheetPreview() {
-    TripexPoseTheme {
+    TripailTheme {
         PlaceDetailSheet(
             detail = MapContract.PlaceDetail(
                 name = "Warszawa",
