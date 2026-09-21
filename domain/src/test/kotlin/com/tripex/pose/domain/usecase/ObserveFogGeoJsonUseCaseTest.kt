@@ -2,6 +2,10 @@ package com.tripex.pose.domain.usecase
 
 import app.cash.turbine.test
 import com.tripex.pose.domain.geo.FogGeoJsonBuilder
+import com.tripex.pose.domain.geo.atlas.AdminLevel
+import com.tripex.pose.domain.geo.atlas.BoundaryFeature
+import com.tripex.pose.domain.geo.atlas.BoundaryGeometrySource
+import com.tripex.pose.domain.geo.atlas.Ring
 import com.tripex.pose.domain.geo.FogGeometry
 import com.tripex.pose.domain.geo.GeoBounds
 import com.tripex.pose.domain.geo.H3Config
@@ -30,6 +34,9 @@ class ObserveFogGeoJsonUseCaseTest {
                     repository = repo,
                     h3 = h3,
                     fogGeoJsonBuilder = FogGeoJsonBuilder(),
+                    regionRepository = FakeUnlockedRegionRepository(),
+                    placeRepository = FakeUnlockedPlaceRepository(),
+                    boundaries = NoBoundaries,
                     defaultDispatcher = dispatcher,
                 )
             val viewport = MutableStateFlow(MapViewport.DEFAULT.copy(zoom = 5.0))
@@ -55,6 +62,9 @@ class ObserveFogGeoJsonUseCaseTest {
                     repository = repo,
                     h3 = h3,
                     fogGeoJsonBuilder = FogGeoJsonBuilder(),
+                    regionRepository = FakeUnlockedRegionRepository(),
+                    placeRepository = FakeUnlockedPlaceRepository(),
+                    boundaries = NoBoundaries,
                     defaultDispatcher = dispatcher,
                 )
             val viewport = MutableStateFlow(MapViewport.DEFAULT.copy(zoom = 3.0))
@@ -75,6 +85,7 @@ class ObserveFogGeoJsonUseCaseTest {
         override suspend fun unlock(hexes: Set<Long>): Int = 0
 
         override fun observeDetailed(viewportCells: Set<Long>): Flow<List<Long>> = flowOf(walkingCells)
+        override fun observeAllDetailed(limit: Int): Flow<List<Long>> = observeDetailed(emptySet())
 
         override fun observeMid(viewportCells: Set<Long>): Flow<List<Long>> = flowOf(midCells)
 
@@ -86,6 +97,13 @@ class ObserveFogGeoJsonUseCaseTest {
     private class FakeH3 : H3Converter {
         var lastOutlined: List<Long> = emptyList()
         override val baseResolution: Int = H3Config.WALKING_RESOLUTION
+
+        override suspend fun warmUp() = Unit
+
+        override fun cellsForPolygon(
+            rings: List<com.tripex.pose.domain.geo.atlas.Ring>,
+            resolution: Int,
+        ): Set<Long> = emptySet()
 
         override fun cellAt(
             lat: Double,
@@ -141,5 +159,15 @@ class ObserveFogGeoJsonUseCaseTest {
         ): Set<Long> = setOf(99L)
 
         override fun toDebugString(cell: Long): String = cell.toString()
+    }
+
+    /** No macro-scale unlocks in these tests — the wash comes from H3 cells alone. */
+    private object NoBoundaries : BoundaryGeometrySource {
+        override suspend fun rings(level: AdminLevel, id: String): Result<List<Ring>> =
+            Result.failure(IllegalStateException("no bundle"))
+
+        override suspend fun feature(level: AdminLevel, id: String): BoundaryFeature? = null
+
+        override suspend fun featureAt(level: AdminLevel, lat: Double, lng: Double): BoundaryFeature? = null
     }
 }

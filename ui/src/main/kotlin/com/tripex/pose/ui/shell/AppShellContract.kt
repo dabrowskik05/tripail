@@ -1,27 +1,46 @@
 package com.tripex.pose.ui.shell
 
-import com.tripex.pose.domain.geo.ContinentId
-import com.tripex.pose.ui.map.MapContract
-
+/**
+ * The shell owns exactly one thing: whether the app is ready to be entered (M2.2).
+ * Navigation state lives in the `NavHost` back stack, not here (M2.4).
+ */
 object AppShellContract {
 
-    sealed interface Stage {
-        data object Loading : Stage
-        data object Continents : Stage
-        data object Map : Stage
+    /**
+     * Which startup signal is missing. Used for the retry copy, never for a progress bar —
+     * there is no fake percentage any more.
+     */
+    enum class FailedSignal {
+        Atlas,
+        Boundaries,
+        Hexes,
+        Style,
+        Storage,
+    }
+
+    sealed interface Readiness {
+        data object Preparing : Readiness
+        data object Ready : Readiness
+
+        /**
+         * At least one signal failed. [degraded] marks a failure the user can enter past —
+         * the atlas only powers the world overview, so the map still works without it.
+         */
+        data class Failed(
+            val signal: FailedSignal,
+            val degraded: Boolean,
+        ) : Readiness
     }
 
     data class State(
-        val stage: Stage = Stage.Loading,
-        val progress: Float = 0f,
-        val isReady: Boolean = false,
-        val mapCameraTarget: MapContract.CameraTarget? = null,
-    )
+        val readiness: Readiness = Readiness.Preparing,
+    ) {
+        val canEnter: Boolean
+            get() = readiness is Readiness.Ready ||
+                (readiness as? Readiness.Failed)?.degraded == true
+    }
 
     sealed interface Intent {
-        data object EnterContinentsRequested : Intent
-        data class OpenMap(val continentId: ContinentId) : Intent
-        data object BackToContinents : Intent
-        data object MapCameraConsumed : Intent
+        data object Retry : Intent
     }
 }

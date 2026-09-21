@@ -5,9 +5,17 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- V3.7.4: required so a service revived by START_STICKY (or, later, by BOOT_COMPLETED)
+         can subscribe to location while no Activity is visible. Without it the service lives,
+         the notification shows, and no fix ever arrives. -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- V3.7.5: a partial wake lock keeps the collector running with the screen off. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- V3.7.5: asked for explicitly by the user, never silently. Sensitive in Play Console. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:name=".TripexPoseApplication"
@@ -30,6 +38,7 @@
         <service
             android:name=".service.TrackingService"
             android:exported="false"
-            android:foregroundServiceType="location" />
+            android:foregroundServiceType="location"
+            android:stopWithTask="false" />
     </application>
 </manifest>

@@ -1,6 +1,7 @@
 package com.tripex.pose.domain.geo
 
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -63,5 +64,21 @@ class FogGeoJsonBuilderTest {
         val json = builder.build(FogGeometry(listOf(listOf(ring))))
         assertTrue(json.contains("[21.0122,52.2297]"))
         assertFalse(json.contains("[52.2297,21.0122]"))
+    }
+
+    @Test
+    fun `whole-region outlines are punched into the same world polygon as H3 cells`() {
+        val cellRing = listOf(20.0 to 52.0, 20.1 to 52.0, 20.1 to 52.1, 20.0 to 52.0)
+        val regionRing = listOf(14.0 to 49.0, 24.0 to 49.0, 24.0 to 55.0, 14.0 to 49.0)
+
+        val json = FogGeoJsonBuilder().build(
+            FogGeometry(listOf(listOf(cellRing))),
+            extraHoles = listOf(regionRing),
+        )
+
+        // One Feature, one Polygon: world ring + the cell hole + the region hole.
+        assertEquals(1, json.split("\"type\":\"Feature\"").size - 1)
+        assertTrue("cell hole missing", json.contains("[20.1,52.1]"))
+        assertTrue("region hole missing", json.contains("[24.0,55.0]"))
     }
 }

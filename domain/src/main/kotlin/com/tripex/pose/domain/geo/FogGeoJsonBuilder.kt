@@ -7,6 +7,7 @@ import javax.inject.Inject
  *
  * - One world polygon with unlocked H3 outer rings as holes (vivid basemap shows through).
  * - Inner rings from H3 multipolygons (unexplored pockets) become separate wash-island Features.
+ * - Whole-region unlocks arrive as `extraHoles` and are punched into the same world polygon.
  */
 class FogGeoJsonBuilder
     @Inject
@@ -14,7 +15,15 @@ class FogGeoJsonBuilder
         /** Full-world wash with no holes — shown before the first Room emission. */
         fun emptyWorld(): String = build(FogGeometry.EMPTY)
 
-        fun build(outline: FogGeometry): String {
+        /**
+         * @param extraHoles outlines of macro-scale unlocks (whole regions). They are punched into
+         *   the same world polygon as the H3 cells, so a region and a walked street behave
+         *   identically from the renderer's point of view.
+         */
+        fun build(
+            outline: FogGeometry,
+            extraHoles: List<List<Pair<Double, Double>>> = emptyList(),
+        ): String {
             val holes = ArrayList<List<Pair<Double, Double>>>(outline.polygons.size)
             val islands = ArrayList<List<Pair<Double, Double>>>(4)
 
@@ -28,7 +37,7 @@ class FogGeoJsonBuilder
 
             val features =
                 buildString {
-                    append(polygonFeature(listOf(WORLD_RING) + holes))
+                    append(polygonFeature(listOf(WORLD_RING) + holes + extraHoles))
                     for (island in islands) {
                         append(',')
                         append(polygonFeature(listOf(island)))

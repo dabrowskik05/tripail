@@ -10,6 +10,14 @@ object H3Config {
     const val LOD_FAR_RESOLUTION: Int = 7
     const val DEFAULT_RING: Int = 1
 
+    /**
+     * Radius wiped clear around each GPS fix, so walking or driving cuts a 2 km-wide swath.
+     *
+     * The game is meant to reward moving through the world, not pacing individual streets — a
+     * 43 m ring (`DEFAULT_RING`) made a road trip reveal a hairline.
+     */
+    const val WALK_REVEAL_RADIUS_M: Double = 1_000.0
+
     /** ~1.3 km at res 11 — above this, bridge returns empty. */
     const val MAX_BRIDGE_CELLS: Int = 30
 
@@ -19,9 +27,14 @@ object H3Config {
      */
     const val APPROX_NEIGHBOR_DISTANCE_M: Double = 43.0
 
-    /** Hard cap so a huge radius cannot OOM the device (~k=150 ≈ 45k cells). */
-    const val MAX_MANUAL_RING: Int = 150
+    /** Hard cap so a huge radius cannot OOM the device (~k=600 ≈ 1.08M cells). */
+    const val MAX_MANUAL_RING: Int = 600
 
-    /** Default city unlock radius for Nominatim search. */
+    /**
+     * Fallback only. City radius is derived from the geocoder result by
+     * [com.tripex.pose.domain.geo.RevealRadiusPolicy]; this is what is left when there is
+     * nothing to derive it from.
+     */
     const val MANUAL_UNLOCK_RADIUS_M: Double = 5_000.0
+
 }

@@ -55,6 +55,7 @@ class UnlockedAreaRepositoryImplTest {
             }
 
         override fun observeDetailed(viewportCells: Set<Long>): Flow<List<Long>> = flowOf(emptyList())
+        override fun observeAllDetailed(limit: Int): Flow<List<Long>> = observeDetailed(emptySet())
         override fun observeMid(viewportCells: Set<Long>): Flow<List<Long>> = flowOf(emptyList())
         override fun observeFar(): Flow<List<Long>> = flowOf(emptyList())
         override fun observeCount(): Flow<Int> = count
@@ -62,6 +63,13 @@ class UnlockedAreaRepositoryImplTest {
 
     private class FakeH3 : H3Converter {
         override val baseResolution: Int = H3Config.WALKING_RESOLUTION
+
+        override suspend fun warmUp() = Unit
+
+        override fun cellsForPolygon(
+            rings: List<com.tripex.pose.domain.geo.atlas.Ring>,
+            resolution: Int,
+        ): Set<Long> = emptySet()
         override fun cellAt(lat: Double, lng: Double): Long = 0L
         override fun cellCenter(cell: Long): Pair<Double, Double> = 0.0 to 0.0
         override fun revealDisk(lat: Double, lng: Double, k: Int): Set<Long> = emptySet()

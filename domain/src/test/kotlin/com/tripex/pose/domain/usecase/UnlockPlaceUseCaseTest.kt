@@ -1,137 +1,92 @@
 package com.tripex.pose.domain.usecase
 
-import com.tripex.pose.domain.geo.FogGeometry
 import com.tripex.pose.domain.geo.GeoBounds
-import com.tripex.pose.domain.geo.H3Config
-import com.tripex.pose.domain.geo.H3Converter
 import com.tripex.pose.domain.geo.Place
 import com.tripex.pose.domain.repository.GeocodingRepository
-import com.tripex.pose.domain.repository.UnlockedAreaRepository
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class UnlockPlaceUseCaseTest {
-    @Test
-    fun `unlocks revealAround cells for geocoded place`() =
-        runTest {
-            val place = Place("Warszawa", 52.23, 21.01)
-            val geo = FakeGeocoding(Result.success(place))
-            val repo = FakeUnlockedRepo()
-            val h3 = FakeH3(cells = setOf(10L, 11L, 12L))
-            val useCase = UnlockPlaceUseCase(geo, h3, repo)
 
-            val result = useCase("Warszawa").getOrThrow()
-
-            assertEquals(place, result.place)
-            assertEquals(3, result.newlyUnlocked)
-            assertEquals(setOf(10L, 11L, 12L), repo.unlocked)
-            assertEquals(5_000.0, h3.lastRadius!!, 0.01)
-        }
+    private val warsaw = Place(
+        displayName = "Warszawa",
+        latitude = 52.23,
+        longitude = 21.01,
+        boundingBox = GeoBounds(north = 52.37, south = 52.10, east = 21.27, west = 20.85),
+        id = "place.warsaw",
+    )
 
     @Test
-    fun `empty query fails without calling geocoder`() =
-        runTest {
-            val geo = FakeGeocoding(Result.failure(IllegalStateException("should not call")))
-            val useCase = UnlockPlaceUseCase(geo, FakeH3(), FakeUnlockedRepo())
+    fun `a city is stored as one circle, not as cells`() = runTest {
+        val places = FakeUnlockedPlaceRepository()
+        val useCase = UnlockPlaceUseCase(FakeGeocoding(Result.success(warsaw)), places)
 
-            val result = useCase("   ")
+        val result = useCase.unlock(warsaw).getOrThrow()
 
-            assertTrue(result.isFailure)
-            assertEquals(0, geo.calls)
-        }
+        assertEquals(1, places.places.value.size)
+        val stored = places.places.value.single()
+        assertEquals("place.warsaw", stored.id)
+        assertEquals(52.23, stored.latitude, 0.0001)
+        assertEquals(result.radiusMeters, stored.radiusMeters, 0.0001)
+    }
 
     @Test
-    fun `geocoding failure propagates`() =
-        runTest {
-            val geo = FakeGeocoding(Result.failure(NoSuchElementException("No results")))
-            val useCase = UnlockPlaceUseCase(geo, FakeH3(), FakeUnlockedRepo())
+    fun `a capital no longer fails for being too large`() = runTest {
+        val places = FakeUnlockedPlaceRepository()
+        val useCase = UnlockPlaceUseCase(FakeGeocoding(Result.success(warsaw)), places)
 
-            assertTrue(useCase("Nowhere").isFailure)
-        }
+        // The old model rasterised this to ~770 000 H3 indices and refused outright.
+        val result = useCase.unlock(warsaw)
 
-    private class FakeGeocoding(
-        private val result: Result<Place>,
-    ) : GeocodingRepository {
+        assertTrue("unlocking a capital must succeed", result.isSuccess)
+        assertTrue("radius should cover the city", result.getOrThrow().radiusMeters > 12_000.0)
+    }
+
+    @Test
+    fun `unlocking the same place twice keeps a single row`() = runTest {
+        val places = FakeUnlockedPlaceRepository()
+        val useCase = UnlockPlaceUseCase(FakeGeocoding(Result.success(warsaw)), places)
+
+        useCase.unlock(warsaw).getOrThrow()
+        useCase.unlock(warsaw).getOrThrow()
+
+        assertEquals(1, places.places.value.size)
+    }
+
+    @Test
+    fun `empty query fails without calling the geocoder`() = runTest {
+        val geo = FakeGeocoding(Result.failure(IllegalStateException("should not call")))
+        val useCase = UnlockPlaceUseCase(geo, FakeUnlockedPlaceRepository())
+
+        assertTrue(useCase("   ").isFailure)
+        assertEquals(0, geo.calls)
+    }
+
+    @Test
+    fun `geocoding failure propagates`() = runTest {
+        val geo = FakeGeocoding(Result.failure(NoSuchElementException("No results")))
+        val useCase = UnlockPlaceUseCase(geo, FakeUnlockedPlaceRepository())
+
+        assertTrue(useCase("Nowhere").isFailure)
+    }
+
+    private class FakeGeocoding(private val result: Result<Place>) : GeocodingRepository {
         var calls: Int = 0
+            private set
+
+        override suspend fun suggest(query: String): Result<List<Place>> {
+            calls++
+            return result.map { listOf(it) }
+        }
+
+        override suspend fun reverseGeocode(lat: Double, lng: Double): Result<Place?> =
+            Result.success(null)
 
         override suspend fun search(query: String): Result<Place> {
             calls++
             return result
         }
-    }
-
-    private class FakeUnlockedRepo : UnlockedAreaRepository {
-        val unlocked = linkedSetOf<Long>()
-
-        override suspend fun unlock(hexes: Set<Long>): Int {
-            val before = unlocked.size
-            unlocked += hexes
-            return unlocked.size - before
-        }
-
-        override fun observeDetailed(viewportCells: Set<Long>): Flow<List<Long>> = flowOf(emptyList())
-
-        override fun observeMid(viewportCells: Set<Long>): Flow<List<Long>> = flowOf(emptyList())
-
-        override fun observeFar(): Flow<List<Long>> = flowOf(emptyList())
-
-        override fun observeCount(): Flow<Int> = flowOf(unlocked.size)
-    }
-
-    private class FakeH3(
-        private val cells: Set<Long> = emptySet(),
-    ) : H3Converter {
-        var lastRadius: Double? = null
-        override val baseResolution: Int = H3Config.WALKING_RESOLUTION
-
-        override fun cellAt(
-            lat: Double,
-            lng: Double,
-        ): Long = 1L
-
-        override fun cellCenter(cell: Long): Pair<Double, Double> = 0.0 to 0.0
-
-        override fun revealDisk(
-            lat: Double,
-            lng: Double,
-            k: Int,
-        ): Set<Long> = cells
-
-        override fun revealAround(
-            lat: Double,
-            lng: Double,
-            radiusMeters: Double,
-        ): Set<Long> {
-            lastRadius = radiusMeters
-            return cells
-        }
-
-        override fun bridge(
-            from: Long,
-            to: Long,
-        ): Set<Long> = emptySet()
-
-        override fun parentOf(
-            cell: Long,
-            resolution: Int,
-        ): Long = cell
-
-        override fun gridDistance(
-            from: Long,
-            to: Long,
-        ): Int = 0
-
-        override fun outline(cells: Collection<Long>): FogGeometry = FogGeometry.EMPTY
-
-        override fun cellsForBounds(
-            bounds: GeoBounds,
-            resolution: Int,
-        ): Set<Long> = emptySet()
-
-        override fun toDebugString(cell: Long): String = cell.toString()
     }
 }

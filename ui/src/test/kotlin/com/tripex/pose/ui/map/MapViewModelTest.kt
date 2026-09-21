@@ -1,16 +1,17 @@
 package com.tripex.pose.ui.map
 
 import app.cash.turbine.test
-import com.tripex.pose.domain.geo.FogGeoJsonBuilder
+import com.tripex.pose.domain.geo.Place
+import com.tripex.pose.domain.geo.PlaceKind
 import com.tripex.pose.domain.location.TrackingController
 import com.tripex.pose.domain.location.TrackingState
+import com.tripex.pose.domain.location.TrackingSetupRepository
 import com.tripex.pose.domain.location.TrackingStateHolder
-import com.tripex.pose.domain.map.MapStyleProvider
-import com.tripex.pose.domain.geo.Place
-import com.tripex.pose.domain.usecase.ObserveFogGeoJsonUseCase
 import com.tripex.pose.domain.usecase.ObserveUnlockedCountUseCase
-import com.tripex.pose.domain.usecase.UnlockPlaceResult
-import com.tripex.pose.domain.usecase.UnlockPlaceUseCase
+import com.tripex.pose.domain.repository.GeocodingRepository
+import com.tripex.pose.domain.usecase.ObserveSearchSuggestionsUseCase
+import com.tripex.pose.domain.usecase.PickSearchResultUseCase
+import com.tripex.pose.domain.usecase.SearchOutcome
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -34,19 +35,31 @@ class MapViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
     private val trackingController = mockk<TrackingController>(relaxed = true)
-    private val unlockPlace = mockk<UnlockPlaceUseCase>()
-    private val mapStyleProvider = mockk<MapStyleProvider>()
+    private val pickSearchResult = mockk<PickSearchResultUseCase>()
+    private val trackingSetup = FakeTrackingSetup()
+
+    /**
+     * Submitting takes the first suggestion, so the fake has to produce one. It echoes the query
+     * back as a place rather than matching a fixture, which keeps every test's query valid.
+     */
+    private val geocoding = object : GeocodingRepository {
+        override suspend fun suggest(query: String): Result<List<Place>> = Result.success(
+            if (query.isBlank()) emptyList() else listOf(Place(query, 52.23, 21.01)),
+        )
+
+        override suspend fun reverseGeocode(lat: Double, lng: Double): Result<Place?> =
+            Result.success(null)
+
+        override suspend fun search(query: String): Result<Place> =
+            Result.failure(NoSuchElementException())
+    }
     private val trackingStateHolder = TrackingStateHolder()
     private val observeUnlockedCount = mockk<ObserveUnlockedCountUseCase>()
-    private val observeFogGeoJson = mockk<ObserveFogGeoJsonUseCase>()
-    private val fogGeoJsonBuilder = FogGeoJsonBuilder()
 
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
-        every { mapStyleProvider.styleUri() } returns "style://test"
         every { observeUnlockedCount() } returns flowOf(0)
-        every { observeFogGeoJson(any()) } returns flowOf(fogGeoJsonBuilder.emptyWorld())
     }
 
     @After
@@ -64,19 +77,6 @@ class MapViewModelTest {
             assertEquals(MapContract.Effect.OpenAppSettings, awaitItem())
             cancelAndIgnoreRemainingEvents()
         }
-    }
-
-    @Test
-    fun `StartDiscovery without fine location requests permissions`() = runTest(testDispatcher) {
-        val viewModel = createViewModel()
-
-        viewModel.effects.test {
-            viewModel.onIntent(MapContract.Intent.StartDiscovery)
-            advanceUntilIdle()
-            assertEquals(MapContract.Effect.RequestLocationPermissions, awaitItem())
-            cancelAndIgnoreRemainingEvents()
-        }
-        verify(exactly = 0) { trackingController.startTracking() }
     }
 
     @Test
@@ -117,8 +117,8 @@ class MapViewModelTest {
     @Test
     fun `SubmitSearch success opens PlaceDetail sheet`() = runTest(testDispatcher) {
         val place = Place("Warszawa", 52.23, 21.01)
-        coEvery { unlockPlace(any()) } returns Result.success(
-            UnlockPlaceResult(place = place, newlyUnlocked = 7),
+        coEvery { pickSearchResult(any()) } returns Result.success(
+            SearchOutcome.PlaceUnlocked(place = place, radiusMeters = 8_000.0),
         )
         val viewModel = createViewModel()
 
@@ -133,8 +133,7 @@ class MapViewModelTest {
             assertEquals(
                 MapContract.PlaceDetail(
                     name = "Warszawa",
-                    typeLabel = "",
-                    unlockedHexCount = 7,
+                    kind = PlaceKind.Unknown,
                 ),
                 done.placeDetail,
             )
@@ -144,51 +143,16 @@ class MapViewModelTest {
         }
     }
 
-    @Test
-    fun `ToggleFabMenu flips fabExpanded`() = runTest(testDispatcher) {
-        val viewModel = createViewModel()
-
-        viewModel.state.test {
-            skipItems(1)
-            viewModel.onIntent(MapContract.Intent.ToggleFabMenu)
-            advanceUntilIdle()
-            assertTrue(awaitItem().fabExpanded)
-            viewModel.onIntent(MapContract.Intent.ToggleFabMenu)
-            advanceUntilIdle()
-            assertEquals(false, awaitItem().fabExpanded)
-            cancelAndIgnoreRemainingEvents()
-        }
-    }
 
     @Test
-    fun `ZoomIn sets cameraTarget with higher zoom`() = runTest(testDispatcher) {
+    fun `OpenSettings asks for a Coming soon message`() = runTest(testDispatcher) {
         val viewModel = createViewModel()
 
-        viewModel.state.test {
-            skipItems(1)
-            viewModel.onIntent(MapContract.Intent.ZoomIn)
-            advanceUntilIdle()
-            val zoomed = awaitItem()
-            assertTrue(zoomed.cameraTarget != null)
-            assertEquals(13.0, zoomed.cameraTarget!!.zoom, 0.001)
-            cancelAndIgnoreRemainingEvents()
-        }
-    }
+        viewModel.onIntent(MapContract.Intent.OpenSettings)
+        advanceUntilIdle()
 
-    @Test
-    fun `OpenSettings shows dialog and collapses FAB`() = runTest(testDispatcher) {
-        val viewModel = createViewModel()
-
-        viewModel.state.test {
-            skipItems(1)
-            viewModel.onIntent(MapContract.Intent.ToggleFabMenu)
-            advanceUntilIdle()
-            skipItems(1)
-            viewModel.onIntent(MapContract.Intent.OpenSettings)
-            advanceUntilIdle()
-            val opened = awaitItem()
-            assertTrue(opened.settingsVisible)
-            assertEquals(false, opened.fabExpanded)
+        viewModel.effects.test {
+            assertEquals(MapContract.Effect.ShowComingSoon, awaitItem())
             cancelAndIgnoreRemainingEvents()
         }
     }
@@ -209,8 +173,8 @@ class MapViewModelTest {
     @Test
     fun `TogglePlaceDetailExpanded flips expanded flag`() = runTest(testDispatcher) {
         val place = Place("Kraków", 50.06, 19.94)
-        coEvery { unlockPlace(any()) } returns Result.success(
-            UnlockPlaceResult(place = place, newlyUnlocked = 3),
+        coEvery { pickSearchResult(any()) } returns Result.success(
+            SearchOutcome.PlaceUnlocked(place = place, radiusMeters = 8_000.0),
         )
         val viewModel = createViewModel()
 
@@ -235,13 +199,115 @@ class MapViewModelTest {
         }
     }
 
+    @Test
+    fun `granting foreground location alone asks for background location`() =
+        runTest(testDispatcher) {
+            val viewModel = createViewModel()
+
+            viewModel.state.test {
+                skipItems(1)
+                viewModel.onIntent(
+                    MapContract.Intent.PermissionsUpdated(
+                        fineGranted = true,
+                        coarseOnly = false,
+                        backgroundGranted = false,
+                    ),
+                )
+                advanceUntilIdle()
+
+                assertEquals(
+                    MapContract.BackgroundPrompt.LocationAlways,
+                    expectMostRecentItem().backgroundPrompt,
+                )
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `with background granted the reliability prompt comes up instead`() =
+        runTest(testDispatcher) {
+            val viewModel = createViewModel()
+
+            viewModel.state.test {
+                skipItems(1)
+                viewModel.onIntent(
+                    MapContract.Intent.PermissionsUpdated(
+                        fineGranted = true,
+                        coarseOnly = false,
+                        backgroundGranted = true,
+                    ),
+                )
+                advanceUntilIdle()
+
+                assertEquals(
+                    MapContract.BackgroundPrompt.Reliability,
+                    expectMostRecentItem().backgroundPrompt,
+                )
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `the reliability prompt is never shown twice`() =
+        runTest(testDispatcher) {
+            trackingSetup.seen = true
+            val viewModel = createViewModel()
+
+            viewModel.state.test {
+                skipItems(1)
+                viewModel.onIntent(
+                    MapContract.Intent.PermissionsUpdated(
+                        fineGranted = true,
+                        coarseOnly = false,
+                        backgroundGranted = true,
+                    ),
+                )
+                advanceUntilIdle()
+
+                assertEquals(null, expectMostRecentItem().backgroundPrompt)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `dismissing the reliability prompt still counts as having seen it`() =
+        runTest(testDispatcher) {
+            val viewModel = createViewModel()
+
+            viewModel.state.test {
+                skipItems(1)
+                viewModel.onIntent(
+                    MapContract.Intent.PermissionsUpdated(
+                        fineGranted = true,
+                        coarseOnly = false,
+                        backgroundGranted = true,
+                    ),
+                )
+                advanceUntilIdle()
+                viewModel.onIntent(MapContract.Intent.BackgroundPromptDismissed)
+                advanceUntilIdle()
+
+                assertEquals(null, expectMostRecentItem().backgroundPrompt)
+                assertTrue(trackingSetup.seen)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
     private fun createViewModel() = MapViewModel(
         trackingController = trackingController,
-        unlockPlace = unlockPlace,
-        fogGeoJsonBuilder = fogGeoJsonBuilder,
-        mapStyleProvider = mapStyleProvider,
+        pickSearchResult = pickSearchResult,
+        trackingSetup = trackingSetup,
+        observeSearchSuggestions = ObserveSearchSuggestionsUseCase(geocoding),
         trackingStateHolder = trackingStateHolder,
-        observeUnlockedCount = observeUnlockedCount,
-        observeFogGeoJson = observeFogGeoJson,
     )
+
+    private class FakeTrackingSetup(
+        var seen: Boolean = false,
+    ) : TrackingSetupRepository {
+        override suspend fun hasSeenReliabilityPrompt(): Boolean = seen
+
+        override suspend fun markReliabilityPromptSeen() {
+            seen = true
+        }
+    }
 }

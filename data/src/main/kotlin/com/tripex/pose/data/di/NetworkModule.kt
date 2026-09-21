@@ -1,7 +1,7 @@
 package com.tripex.pose.data.di
 
 import com.tripex.pose.data.BuildConfig
-import com.tripex.pose.data.network.NominatimApi
+import com.tripex.pose.data.network.MapTilerGeocodingApi
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -20,7 +20,7 @@ import retrofit2.converter.kotlinx.serialization.asConverterFactory
 @InstallIn(SingletonComponent::class)
 internal object NetworkModule {
 
-    private const val NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org/"
+    private const val MAPTILER_BASE_URL = "https://api.maptiler.com/"
 
     @Provides
     @Singleton
@@ -58,16 +58,17 @@ internal object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideNominatimApi(
+    fun provideMapTilerGeocodingApi(
         client: OkHttpClient,
         json: Json,
-    ): NominatimApi {
+    ): MapTilerGeocodingApi {
         val contentType = "application/json".toMediaType()
         return Retrofit.Builder()
-            .baseUrl(NOMINATIM_BASE_URL)
+            .baseUrl(MAPTILER_BASE_URL)
             .client(client)
             .addConverterFactory(json.asConverterFactory(contentType))
             .build()
-            .create(NominatimApi::class.java)
+            .create(MapTilerGeocodingApi::class.java)
     }
+
 }

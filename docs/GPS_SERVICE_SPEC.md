@@ -45,6 +45,8 @@ Serwis odpowiada za jedną rzecz: **zamianę ciągłego strumienia pozycji GPS n
 ```xml
 <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+<!-- V3 etap 7: start subskrypcji z tła po wskrzeszeniu serwisu -->
+<uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 <!-- Android 14+ : osobne uprawnienie per typ serwisu -->
@@ -57,7 +59,8 @@ Serwis odpowiada za jedną rzecz: **zamianę ciągłego strumienia pozycji GPS n
     <service
         android:name=".service.TrackingService"
         android:exported="false"
-        android:foregroundServiceType="location" />
+        android:foregroundServiceType="location"
+        android:stopWithTask="false" />
 </application>
 ```
 
@@ -65,7 +68,7 @@ Serwis odpowiada za jedną rzecz: **zamianę ciągłego strumienia pozycji GPS n
 
 1. `POST_NOTIFICATIONS` — prosić **przed** startem serwisu (API 33+). Brak zgody nie blokuje serwisu, ale użytkownik nie widzi notyfikacji.
 2. `ACCESS_FINE_LOCATION` + `ACCESS_COARSE_LOCATION` — prosić **łącznie w jednym dialogu**. Od Androida 12 użytkownik może przyznać tylko przybliżoną lokalizację; przy `COARSE` (~1–2 km błędu) fog of war jest bezużyteczny → aplikacja musi wykryć ten przypadek i pokazać ekran wyjaśniający z deep-linkiem do ustawień.
-3. **`ACCESS_BACKGROUND_LOCATION` NIE jest potrzebne w MVP.** Foreground Service typu `location` uruchomiony, gdy aplikacja jest widoczna, działa na uprawnieniu *while-in-use* bezterminowo — również po zminimalizowaniu i wygaszeniu ekranu. Background location byłoby konieczne dopiero przy starcie trackingu z tła (reboot, geofence, alarm). To świadomie odkładamy, bo wymaga osobnego, dwuetapowego flow zgody (przekierowanie do Ustawień → „Zezwalaj zawsze") i podnosi ryzyko odrzucenia w Google Play.
+3. **`ACCESS_BACKGROUND_LOCATION` JEST wymagane** (zmiana z V3 etap 7 — poprzednio „poza MVP"). Foreground Service typu `location` uruchomiony przy widocznej aplikacji działa na *while-in-use* również po zminimalizowaniu i wygaszeniu ekranu — i tyle wystarczało w MVP. Nie wystarcza, gdy proces zostanie zabity, a system wskrzesi serwis przez `START_STICKY`: subskrypcja rusza wtedy **bez widocznej Activity**, czyli z tła. Bez tego uprawnienia serwis żyje, notyfikacja wisi i nie przychodzi ani jeden fix — awaria, która wygląda jak działanie. Flow zgody jest dwuetapowy: najpierw fine location, potem **osobno** background, z uzasadnieniem; od Androida 11 systemowy dialog nie oferuje już „Zezwalaj zawsze", więc odmowa kieruje do ekranu ustawień aplikacji. Konsekwencja dla dystrybucji: uprawnienie jest wrażliwe w Google Play i wymaga deklaracji w Play Console.
 
 ### 3.3 Twarde ograniczenie Androida 14
 
@@ -240,10 +243,12 @@ Przed startem serwisu Activity sprawdza `SettingsClient.checkLocationSettings()`
 `GoogleApiAvailability.isGooglePlayServicesAvailable()` przy starcie. Brak GMS → `LocationTracker` powinien mieć drugą implementację opartą na `LocationManager.requestLocationUpdates(GPS_PROVIDER, ...)`. Wybór implementacji w module Hilta (`@Provides` z warunkiem). Nice-to-have, ale interfejs z D4 musi to umożliwiać od pierwszego dnia.
 
 ### 9.4 Restart po reboocie
-Poza MVP. Wymaga `RECEIVE_BOOT_COMPLETED` + `ACCESS_BACKGROUND_LOCATION` (start FGS typu location z broadcastu). Zamiast tego: przy otwarciu aplikacji sprawdzamy `TrackingState` i pokazujemy banner „Tracking został przerwany — wznów".
+**W zakresie od V3 etap 7** (zadanie V3.7.6; nie wchodzi w „Minimum na wyjazd"). Wymaga `RECEIVE_BOOT_COMPLETED` + `ACCESS_BACKGROUND_LOCATION`. Receiver startuje FGS **wyłącznie** gdy trwała intencja trackingu (`TrackingIntentRepository`) jest `true` i oba uprawnienia lokalizacji są przyznane; każdy start FGS z tła musi być opakowany w `try/catch (ForegroundServiceStartNotAllowedException)`, bo ten wyjątek ubija proces. Reguły startu FGS z broadcastu zmieniały się w każdej wersji systemu — zweryfikuj aktualną dokumentację przed implementacją.
+
+Do czasu wdrożenia V3.7.6 obowiązuje stare zachowanie: po reboocie tracking nie wstaje sam.
 
 ### 9.5 Agresywne zabijanie procesów przez OEM
-Xiaomi (MIUI), Huawei, OnePlus i Samsung ubijają serwisy mimo poprawnej implementacji. Mitygacja: jednorazowy, dobrze wyjaśniony ekran onboardingu kierujący do ustawień autostartu / wyłączenia optymalizacji baterii (`ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`). **Uwaga:** to uprawnienie jest wrażliwe w Google Play — dla apki trackingowej jest uzasadnione, ale wymaga deklaracji w Play Console.
+**Zaimplementowane w V3.7.5.** Xiaomi (MIUI), Huawei, OnePlus i Samsung ubijają serwisy mimo poprawnej implementacji. Mitygacja: jednorazowy, dobrze wyjaśniony ekran onboardingu kierujący do ustawień autostartu / wyłączenia optymalizacji baterii (`ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`). **Uwaga:** to uprawnienie jest wrażliwe w Google Play — dla apki trackingowej jest uzasadnione, ale wymaga deklaracji w Play Console.
 
 ### 9.6 Doze mode
 Foreground Service jest zwolniony z Doze, ale częstotliwość fixów przy nieruchomym urządzeniu i tak spada. Jest to zachowanie pożądane — stojąc w miejscu nie odkrywamy niczego nowego.

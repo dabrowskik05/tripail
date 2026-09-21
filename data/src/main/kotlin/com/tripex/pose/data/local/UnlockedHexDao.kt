@@ -21,6 +21,13 @@ internal interface UnlockedHexDao {
     @Query("SELECT DISTINCT parentRes7 FROM unlocked_hex")
     fun observeFar(): Flow<List<Long>>
 
+    /**
+     * Every unlocked cell, newest first, capped. Backs the global wash: discovered ground must be
+     * visible wherever the camera is, not only inside the current viewport.
+     */
+    @Query("SELECT h3Index FROM unlocked_hex ORDER BY discoveredAt DESC LIMIT :limit")
+    fun observeAllDetailed(limit: Int): Flow<List<Long>>
+
     @Query("SELECT COUNT(*) FROM unlocked_hex")
     fun observeCount(): Flow<Int>
 }

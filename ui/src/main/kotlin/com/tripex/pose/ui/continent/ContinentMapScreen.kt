@@ -1,211 +1,240 @@
 package com.tripex.pose.ui.continent
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.StartOffset
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.tripex.pose.domain.geo.AreaCoverage
 import com.tripex.pose.domain.geo.ContinentId
+import com.tripex.pose.domain.geo.GeoBounds
 import com.tripex.pose.ui.R
 import com.tripex.pose.ui.components.ChunkyButton
-import com.tripex.pose.ui.continent.components.SvgRegionCanvas
+import com.tripex.pose.ui.continent.components.ContinentMenuCanvas
 import com.tripex.pose.ui.theme.LocalCartoonStyle
-import com.tripex.pose.ui.theme.TripailTheme
 import kotlinx.coroutines.flow.collectLatest
 
+private const val DIM_FRACTION = 1f
+private const val DIM_DURATION_MILLIS = 300
+private const val PERCENT = 100f
+
+private val PanelShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+
+/**
+ * Stage A — the continent menu (vision §3).
+ *
+ * A screen entirely of its own: a Compose canvas of continent shapes over water. It holds **no
+ * MapLibre instance and no reference to the map host**, which is the whole point of §3 — and also
+ * a hard requirement, because MapLibre's `MapView` is a `SurfaceView` that would paint straight
+ * over this canvas if it were composed at the same time.
+ */
 @Composable
 fun ContinentMapRoute(
-    onOpenMap: (ContinentId) -> Unit,
+    onOpenContinent: (ContinentId, GeoBounds) -> Unit,
+    onBack: () -> Unit,
     viewModel: ContinentMapViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val cartoon = LocalCartoonStyle.current
 
     LaunchedEffect(viewModel) {
         viewModel.effects.collectLatest { effect ->
             when (effect) {
-                is ContinentMapContract.Effect.OpenMap -> onOpenMap(effect.continentId)
+                is ContinentMapContract.Effect.OpenMap ->
+                    onOpenContinent(effect.continentId, effect.bounds)
             }
         }
     }
 
-    BackHandler(enabled = state.selectedContinent != null) {
-        viewModel.onIntent(ContinentMapContract.Intent.BackFromDetail)
+    val selected = state.selectedContinent
+
+    // With nothing selected this handler stays off, so back falls through to the navigation graph
+    // and lands on the splash — which is where the player came from.
+    BackHandler(enabled = selected != null) {
+        viewModel.onIntent(ContinentMapContract.Intent.ClearSelection)
     }
 
-    ContinentMapScreen(
-        state = state,
-        onIntent = viewModel::onIntent,
+    val goBack: () -> Unit = {
+        if (selected != null) {
+            viewModel.onIntent(ContinentMapContract.Intent.ClearSelection)
+        } else {
+            onBack()
+        }
+    }
+
+    val dim by animateFloatAsState(
+        targetValue = if (selected == null) 0f else DIM_FRACTION,
+        animationSpec = tween(DIM_DURATION_MILLIS),
+        label = "continent-dim",
     )
-}
-
-@Composable
-fun ContinentMapScreen(
-    state: ContinentMapContract.State,
-    onIntent: (ContinentMapContract.Intent) -> Unit,
-) {
-    val cartoon = LocalCartoonStyle.current
-    var scale by remember { mutableFloatStateOf(1f) }
-    var offset by remember { mutableStateOf(Offset.Zero) }
-
-    val bounceValues = ContinentCatalog.entries.associate { entry ->
-        entry.id to rememberIdleBounce(entry.bounceDelayMillis)
-    }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(cartoon.paperBg)
-            .safeDrawingPadding(),
+            .background(cartoon.oceanBlue),
     ) {
-        AnimatedContent(
-            targetState = state.selectedContinent,
-            transitionSpec = {
-                (
-                    scaleIn(
-                        initialScale = 0.88f,
-                        animationSpec = tween(
-                            450,
-                            easing = CubicBezierEasing(0.2f, 0.8f, 0.3f, 1f),
-                        ),
-                    ) + fadeIn(tween(450))
-                    ) togetherWith fadeOut(tween(200))
-            },
-            label = "continent-focus",
+        ContinentMenuCanvas(
+            shapes = state.shapes,
+            selectedId = selected,
+            dimFraction = dim,
+            onTap = { viewModel.onIntent(ContinentMapContract.Intent.ContinentClicked(it)) },
             modifier = Modifier.fillMaxSize(),
-        ) { selected ->
-            Column(modifier = Modifier.fillMaxSize()) {
+        )
+
+        Row(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .safeDrawingPadding()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Surface(shape = CircleShape, color = cartoon.paperBg, shadowElevation = 4.dp) {
+                IconButton(onClick = goBack) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = stringResource(R.string.area_back_cd),
+                        tint = cartoon.inkPrimary,
+                    )
+                }
+            }
+            Surface(shape = CircleShape, color = cartoon.paperBg, shadowElevation = 4.dp) {
                 Text(
                     text = stringResource(
                         if (selected == null) {
                             R.string.continent_world_title
                         } else {
-                            ContinentCatalog.entry(selected).nameRes
+                            ContinentPalette.label(selected)
                         },
                     ),
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = cartoon.inkPrimary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                 )
-
-                SvgRegionCanvas(
-                    entries = if (selected == null) {
-                        ContinentCatalog.entries
-                    } else {
-                        listOf(ContinentCatalog.entry(selected))
-                    },
-                    selectedId = selected,
-                    scale = scale,
-                    offset = offset,
-                    onScaleOffsetChange = { s, o ->
-                        scale = s
-                        offset = o
-                    },
-                    onContinentClick = {
-                        onIntent(ContinentMapContract.Intent.ContinentClicked(it))
-                    },
-                    bounceTranslationY = { id ->
-                        val v = bounceValues[id]?.value ?: 0f
-                        -4f * v
-                    },
-                    bounceScale = { id ->
-                        val v = bounceValues[id]?.value ?: 0f
-                        1f + 0.02f * v
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                )
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    if (selected != null) {
-                        val pct = ((state.coverage[selected] ?: 0f) * 100f).toInt()
-                        Text(
-                            text = stringResource(R.string.continent_coverage, pct),
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
-                        ChunkyButton(
-                            text = stringResource(R.string.continent_explore),
-                            onClick = { onIntent(ContinentMapContract.Intent.ExploreSelected) },
-                        )
-                    } else {
-                        Text(
-                            text = stringResource(R.string.continent_hint),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
             }
+        }
+
+        // No card over an empty ocean: with nothing picked the hint floats on the water, so the
+        // default view is just continents.
+        if (selected == null) {
+            Text(
+                text = stringResource(
+                    if (state.atlasUnavailable) {
+                        R.string.continent_atlas_unavailable
+                    } else {
+                        R.string.continent_hint
+                    },
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                color = cartoon.inkPrimary,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 24.dp, vertical = 24.dp),
+            )
+        } else {
+            ContinentMenuPanel(
+                state = state,
+                onExplore = { viewModel.onIntent(ContinentMapContract.Intent.ExploreSelected) },
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
         }
     }
 }
 
+/**
+ * The bottom menu card, and the app's answer to the system navigation bar.
+ *
+ * The `Surface` runs all the way to the bottom edge while its content is lifted above the bar,
+ * so the strip under the gesture handle is the card's own colour instead of ocean showing through
+ * — and nothing interactive ever sits where a system gesture starts.
+ */
 @Composable
-private fun rememberIdleBounce(delayMillis: Int): State<Float> {
-    val transition = rememberInfiniteTransition(label = "idle-bounce")
-    return transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 3_200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-            initialStartOffset = StartOffset(delayMillis),
-        ),
-        label = "bounce",
-    )
-}
+private fun ContinentMenuPanel(
+    state: ContinentMapContract.State,
+    onExplore: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val cartoon = LocalCartoonStyle.current
+    val selected = state.selectedContinent
 
-@Preview(showBackground = true)
-@Composable
-private fun ContinentMapScreenPreview() {
-    TripailTheme {
-        ContinentMapScreen(
-            state = ContinentMapContract.State(
-                coverage = mapOf(ContinentId.Europe to 0.12f),
-                selectedContinent = ContinentId.Europe,
-            ),
-            onIntent = {},
-        )
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = PanelShape,
+        color = ContinentPalette.menuSurface,
+        shadowElevation = 12.dp,
+    ) {
+        Column(
+            modifier = Modifier
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            // The continent's own name is already in the header; repeating it here would just
+            // push the buttons down.
+            val hint = when {
+                state.atlasUnavailable -> R.string.continent_atlas_unavailable
+                selected == null -> R.string.continent_hint
+                else -> null
+            }
+            if (hint != null) {
+                Text(
+                    text = stringResource(hint),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = cartoon.inkPrimary,
+                    textAlign = TextAlign.Center,
+                )
+            }
+
+            val coverage = state.coverage
+            if (selected != null && coverage is AreaCoverage.Known) {
+                Text(
+                    text = stringResource(
+                        R.string.continent_coverage,
+                        (coverage.fraction * PERCENT).toInt(),
+                    ),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = cartoon.inkPrimary,
+                )
+            }
+
+            // Going back lives in the top-left arrow, not down here.
+            if (selected != null) {
+                ChunkyButton(
+                    text = stringResource(R.string.continent_explore),
+                    onClick = onExplore,
+                )
+            }
+        }
     }
 }

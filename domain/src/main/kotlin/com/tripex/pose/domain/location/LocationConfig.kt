@@ -21,6 +21,23 @@ data class LocationConfig(
         const val MAX_AGE_MS: Long = 30_000L
         const val MIN_JITTER_DISTANCE_M: Float = 20f
 
+        /**
+         * Past this age a restored fix is a memory, not a starting point (V3.7.3).
+         *
+         * Bridging to it would paint a straight corridor of unlocked cells across everything
+         * between — at motorway speed, twenty kilometres of places nobody visited.
+         */
+        const val BRIDGE_MAX_AGE_MS: Long = 10 * 60 * 1000L
+
+        /**
+         * Silence long enough to mean something is wrong rather than "standing indoors".
+         *
+         * A service that is alive and collecting nothing is worse than one that crashed: the
+         * notification says it is working. After this long the notification says otherwise and
+         * the stream is re-subscribed.
+         */
+        const val GPS_SILENCE_TIMEOUT_MS: Long = 2 * 60 * 1000L
+
         val DEFAULT: LocationConfig = LocationConfig()
     }
 }

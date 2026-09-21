@@ -31,3 +31,8 @@ CLAUDE.md
 .cursorrules
 .cursor/
 docs/internal/
+
+# Atlas toolchain (local installs + scratch)
+tools/atlas/node_modules/
+tools/.local/
+/tmp/

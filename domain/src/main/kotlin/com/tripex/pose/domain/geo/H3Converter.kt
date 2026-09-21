@@ -1,5 +1,7 @@
 package com.tripex.pose.domain.geo
 
+import com.tripex.pose.domain.geo.atlas.Ring
+
 /**
  * All hexagonal math for Tripail. Stateless, thread-safe, Android-free.
  * Implemented in `:data` as [com.tripex.pose.data.geo.H3Utils].
@@ -9,6 +11,12 @@ package com.tripex.pose.domain.geo
 interface H3Converter {
     /** Resolution used for durable unlock storage. */
     val baseResolution: Int
+
+    /**
+     * Forces the native library to load and answers a trivial query.
+     * Called once at startup so the readiness gate reflects real availability (M2.2).
+     */
+    suspend fun warmUp()
 
     /** Lat/Lng → single cell at [baseResolution]. */
     fun cellAt(
@@ -62,6 +70,18 @@ interface H3Converter {
 
     /** Cell outlines as rings `[lng, lat]` ready for GeoJSON. */
     fun outline(cells: Collection<Long>): FogGeometry
+
+    /**
+     * Cells covering a polygon at [resolution]. [rings] follows the GeoJSON convention:
+     * the first ring is the exterior, the rest are holes. Coordinates are `[lng, lat]`.
+     *
+     * Used as the denominator of area coverage (M3.4) — pick [resolution] through
+     * [CoverageResolutionPolicy], never by hand.
+     */
+    fun cellsForPolygon(
+        rings: List<Ring>,
+        resolution: Int,
+    ): Set<Long>
 
     /** Cells covering a viewport rectangle at [resolution]. */
     fun cellsForBounds(

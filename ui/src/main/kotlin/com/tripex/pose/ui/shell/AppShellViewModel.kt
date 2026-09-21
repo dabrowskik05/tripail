@@ -2,94 +2,104 @@ package com.tripex.pose.ui.shell
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.tripex.pose.domain.geo.ContinentBounds
+import com.tripex.pose.domain.geo.H3Converter
+import com.tripex.pose.domain.geo.atlas.AtlasRepository
 import com.tripex.pose.domain.map.MapStyleProvider
+import com.tripex.pose.domain.tiles.PmTilesBootstrap
 import com.tripex.pose.domain.usecase.ObserveUnlockedCountUseCase
-import com.tripex.pose.ui.map.MapContract
+import com.tripex.pose.ui.shell.AppShellContract.FailedSignal
+import com.tripex.pose.ui.shell.AppShellContract.Readiness
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 
+/**
+ * Startup gate (M2.2). Emits [Readiness] derived from real signals only — there is no timer and
+ * no synthetic progress. The signal that genuinely takes time on a cold first launch is the
+ * PMTiles copy into `filesDir`, and it is the reason a loading indicator exists at all.
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class AppShellViewModel @Inject constructor(
-    mapStyleProvider: MapStyleProvider,
-    observeUnlockedCount: ObserveUnlockedCountUseCase,
+    private val mapStyleProvider: MapStyleProvider,
+    private val h3Converter: H3Converter,
+    private val atlasRepository: AtlasRepository,
+    private val pmTilesBootstrap: PmTilesBootstrap,
+    private val observeUnlockedCount: ObserveUnlockedCountUseCase,
 ) : ViewModel() {
 
-    private val stage = MutableStateFlow<AppShellContract.Stage>(
-        AppShellContract.Stage.Loading,
-    )
-    private val mapCameraTarget = MutableStateFlow<MapContract.CameraTarget?>(null)
+    private val attempt = MutableStateFlow(0)
 
-    private val minimumElapsed = flow {
-        emit(false)
-        delay(MIN_SPLASH_MILLIS)
-        emit(true)
-    }
-
-    private val styleReady = flow {
-        emit(mapStyleProvider.styleUri().isNotEmpty())
-    }
-
-    private val dataReady = observeUnlockedCount()
-        .map { true }
-        .onStart { emit(false) }
-
-    val state: StateFlow<AppShellContract.State> = combine(
-        stage,
-        minimumElapsed,
-        styleReady,
-        dataReady,
-        mapCameraTarget,
-    ) { currentStage, elapsed, style, data, camera ->
-        val signals = listOf(elapsed, style, data)
-        val ready = signals.all { it }
-        AppShellContract.State(
-            stage = currentStage,
-            progress = signals.count { it } / signals.size.toFloat(),
-            isReady = ready,
-            mapCameraTarget = camera,
+    val state: StateFlow<AppShellContract.State> = attempt
+        .flatMapLatest { readiness() }
+        .map { AppShellContract.State(readiness = it) }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
+            initialValue = AppShellContract.State(),
         )
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
-        initialValue = AppShellContract.State(),
-    )
 
     fun onIntent(intent: AppShellContract.Intent) {
         when (intent) {
-            AppShellContract.Intent.EnterContinentsRequested ->
-                stage.value = AppShellContract.Stage.Continents
-            is AppShellContract.Intent.OpenMap -> {
-                val bounds = ContinentBounds.region(intent.continentId).bounds
-                val (lat, lng) = ContinentBounds.center(bounds)
-                mapCameraTarget.value = MapContract.CameraTarget(
-                    latitude = lat,
-                    longitude = lng,
-                    zoom = ContinentBounds.MAP_OVERVIEW_ZOOM,
-                )
-                stage.value = AppShellContract.Stage.Map
-            }
-            AppShellContract.Intent.BackToContinents -> {
-                mapCameraTarget.value = null
-                stage.value = AppShellContract.Stage.Continents
-            }
-            AppShellContract.Intent.MapCameraConsumed ->
-                mapCameraTarget.update { null }
+            AppShellContract.Intent.Retry -> attempt.update { it + 1 }
         }
     }
 
+    private fun readiness(): Flow<Readiness> {
+        val signals = listOf(
+            // Room is open and answering once the DAO flow emits for the first time.
+            signal(FailedSignal.Storage, degraded = false) { observeUnlockedCount().first() },
+            // Forces the H3 native library to load here rather than mid-walk.
+            signal(FailedSignal.Hexes, degraded = false) { h3Converter.warmUp() },
+            signal(FailedSignal.Style, degraded = false) {
+                check(mapStyleProvider.styleUri().isNotEmpty()) { "Empty map style URI" }
+            },
+            signal(FailedSignal.Atlas, degraded = true) { atlasRepository.land() },
+            signal(FailedSignal.Boundaries, degraded = true) { pmTilesBootstrap.ensureReady().getOrThrow() },
+        )
+        return combine(signals) { emitted -> emitted.toList().reduceToReadiness() }
+    }
+
+    /**
+     * One startup step as a flow: [Readiness.Preparing] while it runs, [Readiness.Ready] once it
+     * completes, [Readiness.Failed] when it throws.
+     */
+    private fun signal(
+        name: FailedSignal,
+        degraded: Boolean,
+        block: suspend () -> Unit,
+    ): Flow<Readiness> = flow<Readiness> {
+        block()
+        emit(Readiness.Ready)
+    }
+        .onStart { emit(Readiness.Preparing) }
+        .catch { emit(Readiness.Failed(signal = name, degraded = degraded)) }
+
     private companion object {
-        const val MIN_SPLASH_MILLIS = 1_200L
         const val STOP_TIMEOUT_MILLIS = 5_000L
+
+        /**
+         * A blocking failure wins over everything, then an unfinished signal, then a degraded
+         * failure. Only an all-ready list is [Readiness.Ready].
+         */
+        fun List<Readiness>.reduceToReadiness(): Readiness {
+            firstOrNull { it is Readiness.Failed && !it.degraded }?.let { return it }
+            if (any { it is Readiness.Preparing }) return Readiness.Preparing
+            firstOrNull { it is Readiness.Failed }?.let { return it }
+            return Readiness.Ready
+        }
     }
 }

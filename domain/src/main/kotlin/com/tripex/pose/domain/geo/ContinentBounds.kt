@@ -10,7 +10,11 @@ object ContinentBounds {
     data class ContinentRegion(
         val id: ContinentId,
         val bounds: GeoBounds,
-        /** Approximate land cells at LOD_FAR (res 7). */
+        /**
+         * Rough land-cell estimate at LOD_FAR, kept only as a fallback for when the overview
+         * atlas fails to load. Since M3.4 the displayed percentage is measured from real atlas
+         * geometry by `ObserveAreaCoverageUseCase` — this number is no longer a source of truth.
+         */
         val estimatedLandCells: Int,
     )
 
@@ -54,6 +58,27 @@ object ContinentBounds {
         )
 
     fun region(id: ContinentId): ContinentRegion = ALL.first { it.id == id }
+
+    /**
+     * Box to place the camera on when entering a continent.
+     *
+     * The atlas outline is more faithful than the constants above — except across the
+     * antimeridian. Asia and Oceania own land on both sides of 180°, so the bbox of their outline
+     * comes out as almost the whole planet, and framing it would show the entire world instead of
+     * the continent the player just picked. There the hand-curated box wins.
+     */
+    fun framing(
+        id: ContinentId,
+        atlasBounds: GeoBounds?,
+    ): GeoBounds {
+        val fallback = region(id).bounds
+        if (atlasBounds == null) return fallback
+        val span = atlasBounds.east - atlasBounds.west
+        return if (span >= NEAR_GLOBAL_SPAN_DEG) fallback else atlasBounds
+    }
+
+    /** A longitude span this wide is an antimeridian artefact, not a real extent. */
+    const val NEAR_GLOBAL_SPAN_DEG: Double = 350.0
 
     fun contains(
         bounds: GeoBounds,

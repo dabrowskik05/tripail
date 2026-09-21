@@ -8,10 +8,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -20,39 +23,22 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.tripex.pose.domain.location.TrackingState
 import com.tripex.pose.ui.R
+import com.tripex.pose.ui.map.components.BackgroundTrackingDialog
 import com.tripex.pose.ui.map.components.CommunityDialog
-import com.tripex.pose.ui.map.components.FloatingActionMenu
-import com.tripex.pose.ui.map.components.MapLibreFogMap
-import com.tripex.pose.ui.map.components.MapZoomControls
 import com.tripex.pose.ui.map.components.PlaceDetailSheet
-import com.tripex.pose.ui.map.components.SearchPill
-import com.tripex.pose.ui.map.components.SettingsDialog
+import com.tripex.pose.ui.map.components.MapTopBar
+import com.tripex.pose.ui.map.components.SearchSuggestions
 import com.tripex.pose.ui.theme.TripailTheme
 
 @Composable
 fun MapScreen(
     state: MapContract.State,
     onIntent: (MapContract.Intent) -> Unit,
+    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
     val keyboard = LocalSoftwareKeyboardController.current
 
     Box(modifier = Modifier.fillMaxSize()) {
-        if (state.styleUri.isNotEmpty()) {
-            MapLibreFogMap(
-                styleUri = state.styleUri,
-                fogGeoJson = state.fogGeoJson,
-                initialViewport = state.initialViewport,
-                cameraTarget = state.cameraTarget,
-                onCameraIdle = { viewport ->
-                    onIntent(MapContract.Intent.CameraIdle(viewport))
-                },
-                onCameraTargetConsumed = {
-                    onIntent(MapContract.Intent.CameraTargetConsumed)
-                },
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
-
         Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -61,7 +47,7 @@ fun MapScreen(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            SearchPill(
+            MapTopBar(
                 query = state.searchQuery,
                 isSearching = state.isSearching,
                 onQueryChange = { onIntent(MapContract.Intent.SearchQueryChanged(it)) },
@@ -70,11 +56,15 @@ fun MapScreen(
                     onIntent(MapContract.Intent.SubmitSearch)
                 },
                 onSettingsClick = { onIntent(MapContract.Intent.OpenSettings) },
+                onCommunityClick = { onIntent(MapContract.Intent.OpenCommunity) },
             )
-            Text(
-                text = stringResource(R.string.search_attribution),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+
+            SearchSuggestions(
+                suggestions = state.suggestions,
+                onPick = { place ->
+                    keyboard?.hide()
+                    onIntent(MapContract.Intent.SuggestionPicked(place))
+                },
             )
             state.searchMessage?.let { message ->
                 if (message is MapContract.SearchMessage.Failed) {
@@ -83,6 +73,13 @@ fun MapScreen(
                             ?: stringResource(R.string.search_not_found),
                     )
                 }
+                // Attribution is a licence condition; it rides with the search output rather
+                // than hanging over the map forever.
+                Text(
+                    text = stringResource(R.string.search_attribution),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             state.statusMessage?.let { message ->
                 StatusChip(
@@ -109,48 +106,12 @@ fun MapScreen(
             }
         }
 
-        MapZoomControls(
-            onZoomIn = { onIntent(MapContract.Intent.ZoomIn) },
-            onZoomOut = { onIntent(MapContract.Intent.ZoomOut) },
+        SnackbarHost(
+            hostState = snackbarHostState,
             modifier = Modifier
-                .align(Alignment.CenterStart)
-                .safeDrawingPadding()
-                .padding(start = 12.dp),
+                .align(Alignment.BottomCenter)
+                .safeDrawingPadding(),
         )
-
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .safeDrawingPadding()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Surface(
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-            ) {
-                Text(
-                    text = stringResource(R.string.tracking_unlocked_count, state.unlockedCount),
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                )
-            }
-            FloatingActionMenu(
-                expanded = state.fabExpanded,
-                isTracking = state.trackingState == TrackingState.Tracking,
-                onToggleExpanded = { onIntent(MapContract.Intent.ToggleFabMenu) },
-                onStartStopTracking = {
-                    if (state.trackingState == TrackingState.Tracking) {
-                        onIntent(MapContract.Intent.StopDiscovery)
-                    } else {
-                        onIntent(MapContract.Intent.StartDiscovery)
-                    }
-                },
-                onCommunityClick = { onIntent(MapContract.Intent.OpenCommunity) },
-                onSettingsClick = { onIntent(MapContract.Intent.OpenSettings) },
-            )
-        }
 
         state.placeDetail?.let { detail ->
             PlaceDetailSheet(
@@ -160,13 +121,12 @@ fun MapScreen(
             )
         }
 
-        if (state.settingsVisible) {
-            SettingsDialog(
-                onDismiss = { onIntent(MapContract.Intent.CloseSettings) },
-                onOpenSystemSettings = {
-                    onIntent(MapContract.Intent.CloseSettings)
-                    onIntent(MapContract.Intent.OpenSettingsRequested)
-                },
+        state.backgroundPrompt?.let { prompt ->
+            BackgroundTrackingDialog(
+                prompt = prompt,
+                onConfirm = { onIntent(MapContract.Intent.BackgroundPromptConfirmed) },
+                onDismiss = { onIntent(MapContract.Intent.BackgroundPromptDismissed) },
+                onAutostart = { onIntent(MapContract.Intent.OpenAutostartSettings) },
             )
         }
 
@@ -203,11 +163,8 @@ private fun MapScreenPreview() {
     TripailTheme {
         MapScreen(
             state = MapContract.State(
-                styleUri = "preview",
-                unlockedCount = 42,
                 trackingState = TrackingState.Idle,
                 searchQuery = "Warszawa",
-                fabExpanded = true,
             ),
             onIntent = {},
         )

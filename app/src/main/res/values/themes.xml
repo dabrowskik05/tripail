@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.TripexPose" parent="android:Theme.Material.Light.NoActionBar" />
+    <!--
+      windowBackground is the ocean colour, not the platform's white. Anything that renders
+      before or between Compose destinations (cold start, navigation) shows this instead of a
+      white flash.
+    -->
+    <style name="Theme.TripexPose" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/ocean_water</item>
+    </style>
 </resources>

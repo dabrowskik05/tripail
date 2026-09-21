@@ -5,6 +5,7 @@ import com.tripex.pose.domain.geo.GeoBounds
 import com.tripex.pose.domain.geo.H3Config
 import com.tripex.pose.domain.geo.H3Converter
 import com.tripex.pose.domain.location.DomainLocation
+import com.tripex.pose.domain.location.TrackingSession
 import com.tripex.pose.domain.repository.UnlockedAreaRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -21,7 +22,7 @@ class UnlockAreaUseCaseTest {
             val repo = FakeUnlockedAreaRepository()
             val useCase = UnlockAreaUseCase(h3, repo)
 
-            val unlocked = useCase(location(1.0, 1.0), previous = null)
+            val unlocked = useCase(location(1.0, 1.0), bridgeFrom = null)
 
             assertEquals(7, unlocked)
             assertEquals(7, repo.unlocked.size)
@@ -35,12 +36,43 @@ class UnlockAreaUseCaseTest {
             val repo = FakeUnlockedAreaRepository()
             val useCase = UnlockAreaUseCase(h3, repo)
 
-            useCase(location(1.0, 1.0), previous = null)
-            val second = useCase(location(1.1, 1.1), previous = location(1.0, 1.0))
+            useCase(location(1.0, 1.0), bridgeFrom = null)
+            val second = useCase(location(1.1, 1.1), bridgeFrom = fix(1.0, 1.0))
 
             assertEquals(1, h3.bridgeCalls.size)
             assertTrue(second >= 3)
             assertTrue(repo.unlocked.containsAll(setOf(100L, 101L, 102L)))
+        }
+
+    @Test
+    fun `a stale restored fix is not bridged to`() =
+        runTest {
+            val h3 = FakeH3Converter(diskSize = 7, bridgeCells = setOf(100L))
+            val repo = FakeUnlockedAreaRepository()
+            val useCase = UnlockAreaUseCase(h3, repo)
+
+            // Eleven minutes old: past BRIDGE_MAX_AGE_MS, so the caller hands over null rather
+            // than letting the trail claim a corridor nobody travelled.
+            val now = 11 * 60 * 1000L
+            val session = TrackingSession(lastFix = TrackingSession.Fix(1.0, 1.0, atMs = 0L))
+            useCase(location(1.1, 1.1), bridgeFrom = session.bridgeableFix(now))
+
+            assertTrue(h3.bridgeCalls.isEmpty())
+        }
+
+    @Test
+    fun `a fresh restored fix bridges across the restart`() =
+        runTest {
+            val h3 = FakeH3Converter(diskSize = 7, bridgeCells = setOf(100L))
+            val repo = FakeUnlockedAreaRepository()
+            val useCase = UnlockAreaUseCase(h3, repo)
+
+            val now = 60_000L
+            val session = TrackingSession(lastFix = TrackingSession.Fix(1.0, 1.0, atMs = 0L))
+            useCase(location(1.1, 1.1), bridgeFrom = session.bridgeableFix(now))
+
+            assertEquals(1, h3.bridgeCalls.size)
+            assertTrue(repo.unlocked.contains(100L))
         }
 
     @Test
@@ -51,13 +83,18 @@ class UnlockAreaUseCaseTest {
             val useCase = UnlockAreaUseCase(h3, repo)
             val fix = location(1.0, 1.0)
 
-            val first = useCase(fix, previous = null)
-            val second = useCase(fix, previous = null)
+            val first = useCase(fix, bridgeFrom = null)
+            val second = useCase(fix, bridgeFrom = null)
 
             assertEquals(7, first)
             assertEquals(0, second)
             assertEquals(7, repo.unlocked.size)
         }
+
+    private fun fix(
+        lat: Double,
+        lng: Double,
+    ) = TrackingSession.Fix(latitude = lat, longitude = lng, atMs = 0L)
 
     private fun location(
         lat: Double,
@@ -80,6 +117,7 @@ class UnlockAreaUseCaseTest {
         }
 
         override fun observeDetailed(viewportCells: Set<Long>): Flow<List<Long>> = flowOf(emptyList())
+        override fun observeAllDetailed(limit: Int): Flow<List<Long>> = observeDetailed(emptySet())
 
         override fun observeMid(viewportCells: Set<Long>): Flow<List<Long>> = flowOf(emptyList())
 
@@ -94,6 +132,13 @@ class UnlockAreaUseCaseTest {
     ) : H3Converter {
         val bridgeCalls = mutableListOf<Pair<Long, Long>>()
         override val baseResolution: Int = H3Config.WALKING_RESOLUTION
+
+        override suspend fun warmUp() = Unit
+
+        override fun cellsForPolygon(
+            rings: List<com.tripex.pose.domain.geo.atlas.Ring>,
+            resolution: Int,
+        ): Set<Long> = emptySet()
 
         override fun cellAt(
             lat: Double,

@@ -13,11 +13,22 @@ data class CartoonStyle(
     val accentPink: Color = Color(0xFFFF5E7E),
     val skyTop: Color = Color(0xFFBFE9F7),
     val skyBottom: Color = Color(0xFF8FD4EA),
+    /** Flat ocean fill shared by the start screen and the world overview. */
+    val oceanBlue: Color = Color(0xFFBCE3F7),
+    /** Slightly deeper water toward the bottom — a very soft sense of depth, not a banded gradient. */
+    val oceanDeep: Color = Color(0xFFA3D6F1),
+    /** Wave dashes: a darker tint of the water, since white is invisible on a light ocean. */
+    val oceanWave: Color = Color(0xFF6FAECF),
     val accentPinkShadow: Color = Color(0xFFD43F5E),
     val accentOrange: Color = Color(0xFFFF8A5B),
     val sunYellowShadow: Color = Color(0xFFD9A52F),
     val grassGreen: Color = Color(0xFF58C97A),
     val paperBg: Color = Color(0xFFF6F4EE),
+    /** Primary action colour — calm teal, replaces the red/green chunky button. */
+    val buttonPrimary: Color = Color(0xFF4A8B80),
+    val buttonOnPrimary: Color = Color(0xFFFFFFFF),
+    /** Fill of the selected country/region on the boundary map (M3.1). */
+    val mapLand: Color = Color(0xFFE6C88A),
     val chunkyShadowOffset: Dp = 6.dp,
     val continentColors: List<Color> = listOf(
         Color(0xFF9AA5B1),

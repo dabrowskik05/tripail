@@ -17,6 +17,7 @@ class ObserveUnlockedCountUseCaseTest {
                     override suspend fun unlock(hexes: Set<Long>): Int = 0
 
                     override fun observeDetailed(viewportCells: Set<Long>): Flow<List<Long>> = flowOf(emptyList())
+                    override fun observeAllDetailed(limit: Int): Flow<List<Long>> = observeDetailed(emptySet())
 
                     override fun observeMid(viewportCells: Set<Long>): Flow<List<Long>> = flowOf(emptyList())
 

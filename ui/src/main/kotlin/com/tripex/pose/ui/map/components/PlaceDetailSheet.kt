@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.tripex.pose.domain.geo.PlaceKind
 import com.tripex.pose.ui.R
 import com.tripex.pose.ui.components.ChunkyButton
 import com.tripex.pose.ui.map.MapContract
@@ -58,7 +59,7 @@ fun PlaceDetailSheet(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                text = detail.typeLabel.ifBlank { stringResource(R.string.place_type_city) },
+                text = stringResource(detail.kind.labelRes()),
                 style = MaterialTheme.typography.labelLarge,
                 color = cartoon.accentPink,
             )
@@ -68,10 +69,7 @@ fun PlaceDetailSheet(
                 color = cartoon.inkPrimary,
             )
             Text(
-                text = stringResource(
-                    R.string.place_unlocked_hexes,
-                    detail.unlockedHexCount,
-                ),
+                text = stringResource(R.string.place_unlocked_area),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -139,8 +137,7 @@ private fun PlaceDetailSheetPreview() {
         PlaceDetailSheet(
             detail = MapContract.PlaceDetail(
                 name = "Warszawa",
-                typeLabel = "Miasto",
-                unlockedHexCount = 42,
+                kind = PlaceKind.City,
                 expanded = true,
             ),
             onDismiss = {},

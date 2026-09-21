@@ -5,7 +5,10 @@
     <string name="tracking_channel_description">Powiadomienie aktywnego śledzenia lokalizacji</string>
     <string name="tracking_notification_title">Odkrywasz świat</string>
     <string name="tracking_notification_starting">Uruchamianie śledzenia…</string>
-    <string name="tracking_notification_unlocked">Odkryto %1$d nowych obszarów</string>
+    <!-- No counts here: the number available is the raw cell count, which is an
+         implementation detail. The "last fix at HH:mm" suffix arrives with M5.5. -->
+    <string name="tracking_notification_active">Odkrywanie w toku</string>
     <string name="tracking_notification_stop">Zatrzymaj</string>
     <string name="tracking_notification_permission_missing">Tracking zatrzymany — brak uprawnień</string>
+    <string name="tracking_notification_no_signal">Brak sygnału GPS — szukam ponownie</string>
 </resources>

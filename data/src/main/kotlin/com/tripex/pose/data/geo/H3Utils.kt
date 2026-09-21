@@ -4,6 +4,7 @@ import com.tripex.pose.domain.geo.FogGeometry
 import com.tripex.pose.domain.geo.GeoBounds
 import com.tripex.pose.domain.geo.H3Config
 import com.tripex.pose.domain.geo.H3Converter
+import com.tripex.pose.domain.geo.atlas.Ring
 import com.uber.h3core.H3Core
 import com.uber.h3core.util.LatLng
 import javax.inject.Inject
@@ -18,6 +19,11 @@ internal class H3Utils @Inject constructor(
 ) : H3Converter {
 
     override val baseResolution: Int = H3Config.WALKING_RESOLUTION
+
+    override suspend fun warmUp() {
+        // Touches the JNI boundary: throws UnsatisfiedLinkError here rather than mid-walk.
+        h3.latLngToCell(0.0, 0.0, baseResolution)
+    }
 
     override fun cellAt(lat: Double, lng: Double): Long =
         h3.latLngToCell(lat, lng, baseResolution)
@@ -67,6 +73,20 @@ internal class H3Utils @Inject constructor(
         )
     }
 
+    override fun cellsForPolygon(rings: List<Ring>, resolution: Int): Set<Long> {
+        if (rings.isEmpty()) return emptySet()
+        val exterior = rings.first().toLatLngRing()
+        if (exterior.size < MIN_RING_POINTS) return emptySet()
+        val holes = rings.drop(1)
+            .map { it.toLatLngRing() }
+            .filter { it.size >= MIN_RING_POINTS }
+        return runCatching { h3.polygonToCells(exterior, holes, resolution).toSet() }
+            .getOrDefault(emptySet())
+    }
+
+    /** Ring coordinates are `[lng, lat]` (GeoJSON order); H3 wants `LatLng(lat, lng)`. */
+    private fun Ring.toLatLngRing(): List<LatLng> = map { (lng, lat) -> LatLng(lat, lng) }
+
     override fun cellsForBounds(bounds: GeoBounds, resolution: Int): Set<Long> {
         val ring = listOf(
             LatLng(bounds.south, bounds.west),
@@ -79,4 +99,8 @@ internal class H3Utils @Inject constructor(
     }
 
     override fun toDebugString(cell: Long): String = h3.h3ToString(cell)
+
+    private companion object {
+        const val MIN_RING_POINTS = 4
+    }
 }

@@ -11,7 +11,8 @@ import androidx.compose.ui.graphics.toArgb
 @Immutable
 data class RevealStyle(
     val washColorArgb: Int = Color(0xFFD4C4A8).toArgb(),
-    val washOpacity: Float = 0.68f,
+    /** High enough that streets vanish; the basemap only bleeds through as soft tone. */
+    val washOpacity: Float = 0.94f,
     val edgeColorArgb: Int = Color(0x662B2250).toArgb(),
     val edgeWidthDp: Float = 1.2f,
 )

@@ -26,6 +26,8 @@ android {
             "MAPTILER_API_KEY",
             "\"${localProperties.getProperty("MAPTILER_API_KEY", "")}\"",
         )
+        // Keep in sync with tools/atlas/build_boundaries.sh BOUNDARIES_VERSION.
+        buildConfigField("int", "BOUNDARIES_VERSION", "4")
     }
 
     compileOptions {
@@ -42,6 +44,24 @@ android {
         unitTests.isReturnDefaultValues = true
     }
 }
+
+/**
+ * Robolectric reads `src/test/assets`, but the atlas that ships is the one under `:app`.
+ * Keeping a hand-copied duplicate here let the fixture drift a whole atlas version behind the
+ * app — the tests kept passing against data the app no longer used. Syncing it before every test
+ * run makes that impossible.
+ */
+val syncAtlasTestFixture by tasks.registering(Copy::class) {
+    from(rootProject.file("app/src/main/assets/atlas")) {
+        include("continents.geojson")
+    }
+    into(layout.projectDirectory.dir("src/test/assets/atlas"))
+}
+
+// The asset merge — not the Test task — is what actually reads this directory, so that is
+// where the dependency has to be declared for Gradle to order the two correctly.
+tasks.matching { it.name.startsWith("merge") && it.name.endsWith("UnitTestAssets") }
+    .configureEach { dependsOn(syncAtlasTestFixture) }
 
 kotlin {
     jvmToolchain(17)
@@ -61,6 +81,8 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
+
+    implementation(libs.androidx.datastore.preferences)
 
     implementation(libs.hilt.android)
     ksp(libs.hilt.android.compiler)

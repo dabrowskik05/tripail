@@ -44,6 +44,11 @@ android {
         buildConfig = true
     }
 
+    androidResources {
+        // PMTiles needs random-access byte ranges — do not compress in the APK.
+        noCompress += "pmtiles"
+    }
+
     sourceSets {
         getByName("main") {
             // Explicit: patched Uber H3 natives for arm32/arm64 (see src/main/jniLibs/).
