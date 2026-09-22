@@ -13,3 +13,4 @@ Known issues and planned work. **Do not treat this list as a request to fix them
 9. Android back gesture: ugly screen collapse (not wired cleanly to Compose Navigation).
 10. Animations: no smooth transitions between the Continents view and Country details.
 11. Cleanup: thoroughly remove junk files, dead code, unused resources and leftover test artefacts from the repo.
+12. README: add real UI screenshots (continent menu, fog reveal, trail, search).
