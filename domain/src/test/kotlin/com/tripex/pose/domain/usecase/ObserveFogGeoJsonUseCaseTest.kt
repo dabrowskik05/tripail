@@ -2,6 +2,9 @@ package com.tripex.pose.domain.usecase
 
 import app.cash.turbine.test
 import com.tripex.pose.domain.geo.FogGeoJsonBuilder
+import com.tripex.pose.domain.geo.FogLod
+import com.tripex.pose.domain.geo.RevealUnion
+import com.tripex.pose.domain.repository.UnlockedPlaceRepository
 import com.tripex.pose.domain.geo.atlas.AdminLevel
 import com.tripex.pose.domain.geo.atlas.BoundaryFeature
 import com.tripex.pose.domain.geo.atlas.BoundaryGeometrySource
@@ -16,6 +19,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -34,12 +38,13 @@ class ObserveFogGeoJsonUseCaseTest {
                     repository = repo,
                     h3 = h3,
                     fogGeoJsonBuilder = FogGeoJsonBuilder(),
+                    revealUnion = RevealUnion(),
                     regionRepository = FakeUnlockedRegionRepository(),
                     placeRepository = FakeUnlockedPlaceRepository(),
                     boundaries = NoBoundaries,
                     defaultDispatcher = dispatcher,
                 )
-            val viewport = MutableStateFlow(MapViewport.DEFAULT.copy(zoom = 5.0))
+            val viewport = MutableStateFlow(MapViewport.DEFAULT.copy(zoom = FogLod.NEAR_ZOOM + 1))
 
             useCase(viewport).test {
                 advanceTimeBy(ObserveFogGeoJsonUseCase.CAMERA_DEBOUNCE_MS + 1)
@@ -51,23 +56,39 @@ class ObserveFogGeoJsonUseCaseTest {
             }
         }
 
+    /**
+     * Reverses an earlier decision, deliberately.
+     *
+     * The wash used to outline walking-resolution cells at every zoom, so a hexagon kept its
+     * geographic size. That is what forced the `LIMIT 20000` on the query, and the cap is what
+     * made an hour-old trail disappear on a real drive. Far out, the trail is now drawn from
+     * coarse parents — fewer by orders of magnitude, and nothing is dropped for being old.
+     */
     @Test
-    fun `outlines walking cells even at low zoom not parent lod ids`() =
+    fun `far zoom draws coarse parents rather than walking cells`() =
         runTest {
             val dispatcher = StandardTestDispatcher(testScheduler)
             val repo = FakeRepo(walkingCells = listOf(100L), midCells = listOf(200L), farCells = listOf(300L))
             val h3 = FakeH3()
-            val useCase =
-                ObserveFogGeoJsonUseCase(
-                    repository = repo,
-                    h3 = h3,
-                    fogGeoJsonBuilder = FogGeoJsonBuilder(),
-                    regionRepository = FakeUnlockedRegionRepository(),
-                    placeRepository = FakeUnlockedPlaceRepository(),
-                    boundaries = NoBoundaries,
-                    defaultDispatcher = dispatcher,
-                )
+            val useCase = useCase(repo, h3, dispatcher)
             val viewport = MutableStateFlow(MapViewport.DEFAULT.copy(zoom = 3.0))
+
+            useCase(viewport).test {
+                advanceTimeBy(ObserveFogGeoJsonUseCase.CAMERA_DEBOUNCE_MS + 1)
+                awaitItem()
+                assertEquals(listOf(300L), h3.lastOutlined)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `close in draws exact cells`() =
+        runTest {
+            val dispatcher = StandardTestDispatcher(testScheduler)
+            val repo = FakeRepo(walkingCells = listOf(100L), midCells = listOf(200L), farCells = listOf(300L))
+            val h3 = FakeH3()
+            val useCase = useCase(repo, h3, dispatcher)
+            val viewport = MutableStateFlow(MapViewport.DEFAULT.copy(zoom = FogLod.NEAR_ZOOM + 1))
 
             useCase(viewport).test {
                 advanceTimeBy(ObserveFogGeoJsonUseCase.CAMERA_DEBOUNCE_MS + 1)
@@ -77,6 +98,66 @@ class ObserveFogGeoJsonUseCaseTest {
             }
         }
 
+    /**
+     * The photographed regression: a city circle overlapping the walked trail rendered the
+     * overlap as fog. Unioned, the two become one shape, so the world polygon gets exactly one
+     * hole rather than two that intersect.
+     */
+    @Test
+    fun `a city circle overlapping the trail produces one hole, not two`() =
+        runTest {
+            val dispatcher = StandardTestDispatcher(testScheduler)
+            val repo = FakeRepo(walkingCells = listOf(100L), midCells = emptyList(), farCells = emptyList())
+            val places = FakeUnlockedPlaceRepository()
+            // Centred inside the square FakeH3.outline() returns, so the two overlap.
+            places.places.value = listOf(
+                UnlockedPlaceRepository.UnlockedPlace(
+                    id = "skierniewice",
+                    name = "Skierniewice",
+                    latitude = 52.05,
+                    longitude = 21.05,
+                    radiusMeters = 5_000.0,
+                    unlockedAt = 0L,
+                ),
+            )
+            val useCase = ObserveFogGeoJsonUseCase(
+                repository = repo,
+                h3 = FakeH3(),
+                fogGeoJsonBuilder = FogGeoJsonBuilder(),
+                revealUnion = RevealUnion(),
+                regionRepository = FakeUnlockedRegionRepository(),
+                placeRepository = places,
+                boundaries = NoBoundaries,
+                defaultDispatcher = dispatcher,
+            )
+            val viewport = MutableStateFlow(MapViewport.DEFAULT.copy(zoom = FogLod.NEAR_ZOOM + 1))
+
+            useCase(viewport).test {
+                advanceTimeBy(ObserveFogGeoJsonUseCase.CAMERA_DEBOUNCE_MS + 1)
+                val json = awaitItem()
+
+                // One Feature (the world polygon). Two overlapping holes would have produced
+                // the world polygon plus leftover island Features.
+                assertEquals(1, json.split("\"type\":\"Feature\"").size - 1)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    private fun useCase(
+        repo: FakeRepo,
+        h3: FakeH3,
+        dispatcher: TestDispatcher,
+    ) = ObserveFogGeoJsonUseCase(
+        repository = repo,
+        h3 = h3,
+        fogGeoJsonBuilder = FogGeoJsonBuilder(),
+        revealUnion = RevealUnion(),
+        regionRepository = FakeUnlockedRegionRepository(),
+        placeRepository = FakeUnlockedPlaceRepository(),
+        boundaries = NoBoundaries,
+        defaultDispatcher = dispatcher,
+    )
+
     private class FakeRepo(
         private val walkingCells: List<Long>,
         private val midCells: List<Long>,
@@ -85,7 +166,6 @@ class ObserveFogGeoJsonUseCaseTest {
         override suspend fun unlock(hexes: Set<Long>): Int = 0
 
         override fun observeDetailed(viewportCells: Set<Long>): Flow<List<Long>> = flowOf(walkingCells)
-        override fun observeAllDetailed(limit: Int): Flow<List<Long>> = observeDetailed(emptySet())
 
         override fun observeMid(viewportCells: Set<Long>): Flow<List<Long>> = flowOf(midCells)
 

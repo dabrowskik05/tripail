@@ -21,7 +21,13 @@ data class MapScene(
     /** Highlighted feature id at the current level. */
     val selectedId: String? = null,
 ) {
-    val showsRegions: Boolean get() = level == MapLevel.Region
+    /**
+     * Regions are drawn and tappable from the moment a country opens (V3.3.2).
+     *
+     * They used to be hidden behind a mode switch, which made the region next door unreachable
+     * without first pressing a button — and made the country next door unreachable afterwards.
+     */
+    val showsRegions: Boolean get() = level == MapLevel.Country || level == MapLevel.Region
 
     /**
      * At the country level everything but the picked country sinks under denser parchment, so the
@@ -61,4 +67,17 @@ data class CameraRequest(
     val animate: Boolean,
     /** Distinguishes two requests for the same bounds. */
     val token: Long,
-)
+    /**
+     * Share of the shorter screen side left as margin.
+     *
+     * Entering a continent asks for [FILL_PADDING]: the shape should reach the edges, because
+     * that is the whole of what the player is looking at. Settling on a country inside a wider
+     * view keeps [FRAME_PADDING], which leaves the surroundings visible for context.
+     */
+    val paddingFraction: Float = FRAME_PADDING,
+) {
+    companion object {
+        const val FRAME_PADDING = 0.13f
+        const val FILL_PADDING = 0.04f
+    }
+}

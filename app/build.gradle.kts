@@ -38,6 +38,12 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    lint {
+        // A key that exists in Polish and not in English is a bug, not a warning: the screen
+        // silently falls back and the app reads half-translated (V3.5.5).
+        error += "MissingTranslation"
+    }
+
     buildFeatures {
         compose = true
         // Needed for BuildConfig.DEBUG (TrackingService mock-location gate).
@@ -87,6 +93,7 @@ dependencies {
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.appcompat)
     implementation(libs.androidx.lifecycle.runtime.ktx)
 
     implementation(platform(libs.androidx.compose.bom))

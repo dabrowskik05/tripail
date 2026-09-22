@@ -34,6 +34,13 @@ object AppShellContract {
 
     data class State(
         val readiness: Readiness = Readiness.Preparing,
+        /**
+         * True until the player has picked a language (V3.5.2).
+         *
+         * Starts `false` so a first frame drawn before the preference has been read does not
+         * flash the picker at somebody who chose months ago.
+         */
+        val needsLanguage: Boolean = false,
     ) {
         val canEnter: Boolean
             get() = readiness is Readiness.Ready ||

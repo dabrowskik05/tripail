@@ -28,17 +28,21 @@ import androidx.compose.ui.unit.dp
 import com.tripex.pose.ui.R
 import com.tripex.pose.ui.map.host.MapHostState
 import com.tripex.pose.ui.map.host.MapScene
+import com.tripex.pose.ui.shell.chrome.AppChromeState
+import com.tripex.pose.ui.shell.chrome.RegisterChrome
 import com.tripex.pose.ui.theme.LocalCartoonStyle
 
 /**
- * Chrome for one level of the cascade.
+ * One level of the cascade.
  *
- * Draws **no map**. The map lives above the navigation graph and outlives every transition; a
- * level only declares the scene it wants and claims the tap handler while it is on screen.
+ * Draws **no map** and, since V3.2.1, **no chrome** either. Both live above the navigation graph
+ * and outlive every transition; a level only declares the scene it wants, registers its name and
+ * its back action, and claims the tap handler while it is on screen.
  */
 @Composable
 internal fun BoundaryMapScreen(
     host: MapHostState,
+    chrome: AppChromeState,
     scene: MapScene,
     title: String,
     onBack: () -> Unit,
@@ -46,7 +50,7 @@ internal fun BoundaryMapScreen(
     modifier: Modifier = Modifier,
     bottomContent: @Composable () -> Unit = {},
 ) {
-    val cartoon = LocalCartoonStyle.current
+    RegisterChrome(chrome = chrome, title = title, onBack = onBack)
 
     LaunchedEffect(scene) { host.show(scene) }
 
@@ -60,35 +64,6 @@ internal fun BoundaryMapScreen(
     }
 
     Box(modifier = modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .safeDrawingPadding()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Surface(shape = CircleShape, color = cartoon.paperBg, shadowElevation = 4.dp) {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        imageVector = Icons.Filled.ArrowBack,
-                        contentDescription = stringResource(R.string.area_back_cd),
-                        tint = cartoon.inkPrimary,
-                    )
-                }
-            }
-            if (title.isNotBlank()) {
-                Surface(shape = CircleShape, color = cartoon.paperBg, shadowElevation = 4.dp) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleLarge,
-                        color = cartoon.inkPrimary,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                    )
-                }
-            }
-        }
-
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)

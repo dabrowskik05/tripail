@@ -12,4 +12,11 @@ internal data class UnlockedPlaceEntity(
     val longitude: Double,
     val radiusMeters: Double,
     val unlockedAt: Long,
+    /**
+     * `MANUAL` or `AUTO` — see `UnlockedPlaceRepository.Source`.
+     *
+     * Stored as text rather than an ordinal so a reordered enum cannot silently turn every
+     * player's earned cities into revocable ones.
+     */
+    val source: String = "MANUAL",
 )

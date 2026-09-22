@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="tracking_start">Rozpocznij odkrywanie</string>
-    <string name="tracking_stop">Zatrzymaj odkrywanie</string>
     <string name="tracking_open_settings">Ustawienia aplikacji</string>
     <string name="tracking_status_idle">Gotowy do odkrywania</string>
     <string name="tracking_status_active">Odkrywanie w toku</string>
@@ -19,11 +17,7 @@
     <string name="background_reliability_autostart">Ustawienia autostartu (Xiaomi, Samsung, Huawei)</string>
     <string name="background_prompt_later">Później</string>
     <string name="status_tracking_active">Śledzenie aktywne — mgła odsłania się wraz z trasą.</string>
-    <string name="search_label">Miasto</string>
     <string name="search_placeholder">np. Warszawa</string>
-    <string name="search_submit">Szukaj</string>
-    <string name="search_working">…</string>
-    <string name="search_unlocked">Odkryto: %1$s</string>
     <string name="search_not_found">Nie znaleziono miejsca</string>
     <string name="search_attribution">Wyszukiwanie © MapTiler © OpenStreetMap</string>
     <string name="loading_enter">Wejdź</string>
@@ -31,10 +25,10 @@
     <string name="loading_failed">Nie udało się przygotować danych.</string>
     <string name="loading_failed_atlas">Przegląd świata będzie niedostępny, ale mapa zadziała.</string>
     <string name="loading_retry">Spróbuj ponownie</string>
+    <string name="search_open_cd">Szukaj miejsca</string>
+    <string name="search_close_cd">Zamknij wyszukiwanie</string>
     <string name="map_settings_cd">Ustawienia</string>
     <string name="map_community_cd">Społeczność</string>
-    <string name="map_fab_expand_cd">Pokaż akcje</string>
-    <string name="map_fab_collapse_cd">Ukryj akcje</string>
     <string name="place_kind_country">Państwo</string>
     <string name="place_kind_region">Region</string>
     <string name="place_kind_city">Miasto</string>
@@ -43,14 +37,13 @@
     <string name="place_kind_village">Wieś</string>
     <string name="place_kind_address">Adres</string>
     <string name="place_kind_poi">Miejsce</string>
-    <string name="place_unlocked_area">Odkryto nowy teren</string>
-    <string name="place_show_more">Pokaż więcej</string>
-    <string name="place_show_less">Pokaż mniej</string>
     <string name="place_dismiss">Zamknij</string>
-    <string name="place_tag_unlocked">Odblokowane</string>
-    <string name="place_tag_search">Wyszukiwanie</string>
+    <string name="place_reveal">Odkryj</string>
+    <string name="place_cover">Zakryj</string>
+    <string name="place_working">Chwileczkę…</string>
+    <string name="place_earned">Odkryte na miejscu — zostaje na zawsze</string>
     <string name="settings_title">Ustawienia</string>
-    <string name="settings_coming_soon">Wkrótce</string>
+    <string name="settings_language">Język</string>
     <string name="community_title">Społeczność</string>
     <string name="community_coming_soon">Już wkrótce — rankingi i wspólne odkrycia.</string>
     <string name="dialog_close">Zamknij</string>
@@ -58,7 +51,6 @@
     <string name="continent_hint">Dotknij kontynentu, by zobaczyć postęp odkrycia</string>
     <string name="continent_atlas_unavailable">Nie udało się wczytać mapy świata. Możesz wrócić i spróbować ponownie.</string>
     <string name="continent_coverage">Odkryte: %1$d%%</string>
-    <string name="continent_explore">Odkrywaj mapę</string>
     <string name="continent_north_america">Ameryka Północna</string>
     <string name="continent_south_america">Ameryka Południowa</string>
     <string name="continent_europe">Europa</string>
@@ -67,9 +59,9 @@
     <string name="continent_oceania">Australia i Oceania</string>
     <string name="continent_antarctica">Antarktyda</string>
     <string name="area_back">Wstecz</string>
+    <string name="continent_select">Wybierz</string>
+    <string name="continent_pan_cd">Przesuń świat na wschód lub zachód</string>
     <string name="area_coverage">Odkryte: %1$d%%</string>
-    <string name="area_coverage_unavailable">Brak danych o tym obszarze</string>
-    <string name="area_regions">Regiony</string>
     <string name="area_region_unlock">Odkryj cały region</string>
     <string name="area_region_unlocking">Odkrywam…</string>
     <string name="area_region_cover">Zakryj region</string>
@@ -77,6 +69,5 @@
     <string name="area_boundaries_unavailable">Mapa granic jest jeszcze przygotowywana</string>
     <string name="area_back_cd">Wróć o poziom wyżej</string>
     <string name="area_pick_country">Dotknij kraju, by zobaczyć jego postęp</string>
-    <string name="area_open_map">Odkrywaj mapę</string>
     <string name="area_country_unknown">Tutaj nie ma kraju do wybrania</string>
 </resources>

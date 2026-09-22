@@ -13,17 +13,14 @@ object CountryContract {
         val bounds: GeoBounds? = null,
         val coverage: AreaCoverage = AreaCoverage.Unavailable,
         val map: BoundaryMapState = BoundaryMapState(),
-    ) {
-        val showingRegions: Boolean get() = map.mode is BoundaryMode.Regions
-    }
+    )
 
     sealed interface Intent {
+        /**
+         * A tap on the map. There is no longer a mode to be in: the hit test decides whether it
+         * landed on a region of this country or on another country entirely (V3.3.1–V3.3.3).
+         */
         data class FeatureTapped(val tap: BoundaryTap) : Intent
-
-        /** Swaps the layer filters to ADM1 without leaving this destination (M3.2 pt 3). */
-        data object ShowRegions : Intent
-        data object ShowCountries : Intent
-        data object ExploreRequested : Intent
     }
 
     sealed interface Effect {

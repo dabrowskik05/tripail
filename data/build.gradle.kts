@@ -58,10 +58,14 @@ val syncAtlasTestFixture by tasks.registering(Copy::class) {
     into(layout.projectDirectory.dir("src/test/assets/atlas"))
 }
 
-// The asset merge — not the Test task — is what actually reads this directory, so that is
-// where the dependency has to be declared for Gradle to order the two correctly.
-tasks.matching { it.name.startsWith("merge") && it.name.endsWith("UnitTestAssets") }
-    .configureEach { dependsOn(syncAtlasTestFixture) }
+// Everything that reads `src/test/assets` has to be ordered after the sync, not just the asset
+// merge: lint builds its own model of the same directory, and running lint in the same
+// invocation as the tests made Gradle refuse the undeclared dependency outright.
+tasks.matching {
+    (it.name.startsWith("merge") && it.name.endsWith("UnitTestAssets")) ||
+        it.name.contains("LintModel") ||
+        it.name.startsWith("lintAnalyze")
+}.configureEach { dependsOn(syncAtlasTestFixture) }
 
 kotlin {
     jvmToolchain(17)

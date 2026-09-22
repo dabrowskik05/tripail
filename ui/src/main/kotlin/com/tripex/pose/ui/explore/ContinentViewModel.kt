@@ -5,10 +5,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.toRoute
 import com.tripex.pose.core.logging.Logger
+import com.tripex.pose.domain.geo.ContinentBounds
+import com.tripex.pose.domain.geo.ContinentFocusPolicy
 import com.tripex.pose.domain.geo.ContinentId
 import com.tripex.pose.domain.geo.atlas.AdminLevel
 import com.tripex.pose.domain.geo.atlas.BoundaryGeometrySource
 import com.tripex.pose.domain.geo.projection.GeometryOps
+import com.tripex.pose.domain.location.TrackingSessionRepository
 import com.tripex.pose.ui.navigation.Continent
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -27,13 +30,17 @@ import kotlinx.coroutines.launch
  * `boundaries.pmtiles`, because the next level flies the camera onto the country and has to know
  * where it is before any tile has loaded there.
  *
- * The camera for this level itself was already placed by the continent menu on the way in, so
- * nothing here touches it.
+ * The continent-wide framing is placed by the menu on the way in (V3.3.5). This level adds two
+ * things on top, in this order: a fence around the continent so panning cannot wander onto
+ * neighbouring, still-fogged ground (V3.3.7), and — only if the player is actually here — one
+ * soft flight down to them (V3.3.6). Seeing the continent whole first is the point; arriving
+ * straight at the player would skip the context that makes the drill-down legible.
  */
 @HiltViewModel
 class ContinentViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val boundaries: BoundaryGeometrySource,
+    private val trackingSession: TrackingSessionRepository,
     private val logger: Logger,
 ) : ViewModel() {
 
@@ -44,7 +51,6 @@ class ContinentViewModel @Inject constructor(
         ContinentContract.State(
             continentId = continentId,
             map = BoundaryMapState(
-                mode = BoundaryMode.Countries,
                 selectedId = null,
                 continentId = continentId?.name,
             ),
@@ -54,6 +60,25 @@ class ContinentViewModel @Inject constructor(
 
     private val _effects = Channel<ContinentContract.Effect>(Channel.BUFFERED)
     val effects = _effects.receiveAsFlow()
+
+    init {
+        val bounds = continentId?.let { ContinentBounds.region(it).bounds }
+        if (bounds != null) {
+            viewModelScope.launch {
+                _effects.send(ContinentContract.Effect.LimitCamera(ContinentFocusPolicy.cameraLimit(bounds)))
+
+                val focus = ContinentFocusPolicy.focus(
+                    continent = bounds,
+                    fix = trackingSession.load().lastFix,
+                    nowMs = System.currentTimeMillis(),
+                )
+                if (focus != null) {
+                    logger.i(TAG, "Player is on $continentId — settling on them")
+                    _effects.send(ContinentContract.Effect.FocusPlayer(focus))
+                }
+            }
+        }
+    }
 
     fun onIntent(intent: ContinentContract.Intent) {
         when (intent) {

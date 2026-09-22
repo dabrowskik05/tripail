@@ -14,8 +14,16 @@ import kotlinx.serialization.Serializable
  * Country and Region carry a bbox because a search result (M4.10) enters the hierarchy from the
  * side and has to place the camera before any boundary tile has loaded.
  */
+/** First launch only: pick a language before anything else is shown (V3.5.2). */
+@Serializable
+data object Language
+
 @Serializable
 data object Loading
+
+/** One real setting so far — the language (V3.5.3). */
+@Serializable
+data object Settings
 
 @Serializable
 data object World

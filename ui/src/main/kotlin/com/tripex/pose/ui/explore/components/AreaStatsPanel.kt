@@ -33,20 +33,34 @@ private val ProgressHeight = 10.dp
 private const val PERCENT = 100f
 
 /**
- * Bottom card describing the selected area (M3.2 / M3.3).
+ * Bottom card describing the selected area.
  *
- * Rows only appear when there is something true to put in them: an area whose coverage could not
- * be measured shows no bar and no percentage rather than a confident `0%`.
+ * ### Two things it no longer does
+ *
+ * It used to carry an "Explore map" button and a "Regions" toggle. Both are gone: the map level
+ * is reached by navigating down, and regions are tappable directly (V3.2.4, V3.3.1). The panel
+ * is now purely a description of where you are.
+ *
+ * It also used to replace the progress bar with "no data about this area" when coverage could
+ * not be measured — which reached real countries whose polygon was simply smaller than one cell
+ * at the measuring resolution. The bar is now always drawn, and unknown reads as `0%`
+ * (V3.3.8).
  */
 @Composable
 internal fun AreaStatsPanel(
     flag: String,
     title: String,
     coverage: AreaCoverage,
-    onExplore: () -> Unit,
     modifier: Modifier = Modifier,
-    secondaryLabel: String? = null,
-    onSecondary: (() -> Unit)? = null,
+    /**
+     * Optional reveal / cover action.
+     *
+     * The country level passes none — a country is not something to claim in one press
+     * (§8.1 pt 5). The region level does, because a region is the largest thing the player may
+     * deliberately take, and taking it has to be undoable from the same spot.
+     */
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
 ) {
     val cartoon = LocalCartoonStyle.current
 
@@ -77,40 +91,30 @@ internal fun AreaStatsPanel(
                 )
             }
 
-            when (coverage) {
-                is AreaCoverage.Known -> CoverageRow(coverage)
-                AreaCoverage.Unavailable -> Text(
-                    text = stringResource(R.string.area_coverage_unavailable),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = cartoon.inkPrimary.copy(alpha = 0.7f),
-                )
-            }
+            CoverageRow(coverage.fractionOrZero)
 
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                ChunkyButton(text = stringResource(R.string.area_open_map), onClick = onExplore)
-                if (secondaryLabel != null && onSecondary != null) {
-                    TextButton(onClick = onSecondary) { Text(secondaryLabel) }
-                }
+            if (actionLabel != null) {
+                ChunkyButton(
+                    text = actionLabel,
+                    onClick = { onAction?.invoke() },
+                    enabled = onAction != null,
+                )
             }
         }
     }
 }
 
 @Composable
-private fun CoverageRow(coverage: AreaCoverage.Known) {
+private fun CoverageRow(fraction: Float) {
     val cartoon = LocalCartoonStyle.current
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
-            text = stringResource(R.string.area_coverage, (coverage.fraction * PERCENT).toInt()),
+            text = stringResource(R.string.area_coverage, (fraction * PERCENT).toInt()),
             style = MaterialTheme.typography.bodyLarge,
             color = cartoon.inkPrimary,
         )
         LinearProgressIndicator(
-            progress = { coverage.fraction },
+            progress = { fraction },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(ProgressHeight)
@@ -137,23 +141,15 @@ private fun AreaStatsPanelPreview() {
                 areaCells = 4_200,
                 discoveredCells = 714,
             ),
-            onExplore = {},
-            secondaryLabel = "Regiony",
-            onSecondary = {},
         )
     }
 }
 
-@Preview(showBackground = true, name = "Coverage unavailable")
+@Preview(showBackground = true, name = "Nothing discovered yet")
 @Composable
-private fun AreaStatsPanelUnavailablePreview() {
+private fun AreaStatsPanelEmptyPreview() {
     TripailTheme {
-        AreaStatsPanel(
-            flag = "🏳️",
-            title = "Obszar sporny",
-            coverage = AreaCoverage.Unavailable,
-            onExplore = {},
-        )
+        AreaStatsPanel(flag = "🇱🇺", title = "Luksemburg", coverage = AreaCoverage.Unavailable)
     }
 }
 

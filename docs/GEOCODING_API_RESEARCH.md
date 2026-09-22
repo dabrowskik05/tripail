@@ -85,3 +85,36 @@ Dla modułu `M6 / Faza 6`:
 * [2] User_Agent argument in Nominatim in GeoPy - GIS StackExchange
 * [3] How to run OpenStreetMap locally? Reverse geocoding without
 * [4] The best free geocoding APIs available: Ultimate list - Ambee
+
+---
+
+## Aktualizacja 2026-09-22 (V3.4.2) — dlaczego „norwegia" nic nie zwracało
+
+Dwie przyczyny, obie naprawione w `MapTilerGeocodingRepository`:
+
+1. **Cache zapamiętywał brak wyników na 30 dni.** Puste odpowiedzi trafiały do
+   `geocode_cache` tak samo jak trafione. Jedno nieudane zapytanie oznaczało
+   miesiąc ciszy dla tego hasła — również po naprawie przyczyny źródłowej —
+   podczas gdy prefiks (`norwe`) działał dalej, bo wpadł do cache'u po drodze do
+   wyniku, który wrócił. **Pusty wynik nie jest wynikiem i nie jest zapisywany.**
+2. **Pytaliśmy o jeden język, wzięty z locale urządzenia.** MapTiler indeksuje
+   nazwy per język, więc pełna polska nazwa kraju mogła nie trafić w indeks,
+   w który trafiał prefiks. Teraz wysyłamy **oba** języki, preferowany pierwszy
+   (`pl,en` albo `en,pl`), a język bierzemy z **ustawienia aplikacji**, nie
+   z urządzenia — gracz może mieć polski interfejs na angielskim telefonie.
+
+Klucz cache'a nadal zawiera język: wspólny klucz serwowałby polskie wyniki
+angielskiemu interfejsowi.
+
+**Do weryfikacji na urządzeniu:** logowanie HTTP (debug, poziom BASIC) pokazuje
+URL i status każdego zapytania. Jeśli po tych dwóch naprawach któreś hasło nadal
+zwraca pustkę, następne hipotezy to kodowanie `@Path` dla diakrytyków
+(`Kraków` vs `Krakow`) oraz brak `types` przy autocomplete.
+
+---
+
+## Aktualizacja 2026-09-22 (V3.4.3) — Enter
+
+`search()` jest odtąd realnym zapytaniem, nie sięgnięciem po pierwszą
+podpowiedź. Poprzednio Enter brał `suggestions.first()` i przy pustej liście
+kończył się cichym `return` — czyli dokładnie wtedy, gdy gracz go naciska.

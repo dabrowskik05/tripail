@@ -11,6 +11,7 @@ import com.tripex.pose.domain.geo.atlas.AreaKey
 import com.tripex.pose.domain.geo.atlas.BoundaryGeometrySource
 import com.tripex.pose.domain.geo.projection.GeometryOps
 import com.tripex.pose.domain.repository.UnlockedRegionRepository
+import com.tripex.pose.domain.settings.AppLanguageRepository
 import com.tripex.pose.domain.usecase.ObserveAreaCoverageUseCase
 import com.tripex.pose.domain.usecase.UnlockRegionUseCase
 import com.tripex.pose.ui.navigation.Region
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -42,6 +44,7 @@ class RegionViewModel @Inject constructor(
     private val observeAreaCoverage: ObserveAreaCoverageUseCase,
     private val unlockRegion: UnlockRegionUseCase,
     private val unlockedRegions: UnlockedRegionRepository,
+    private val appLanguage: AppLanguageRepository,
 ) : ViewModel() {
 
     private val route: Region = savedStateHandle.toRoute()
@@ -55,7 +58,6 @@ class RegionViewModel @Inject constructor(
             bounds = route.bounds(),
             map = BoundaryMapState(
                 continentId = route.continentId.ifBlank { null },
-                mode = BoundaryMode.Regions(route.countryIso2),
                 selectedId = route.regionId,
             ),
         ),
@@ -156,11 +158,14 @@ class RegionViewModel @Inject constructor(
     private fun refreshName(regionId: String) {
         viewModelScope.launch {
             val feature = boundaries.feature(AdminLevel.Adm1, regionId) ?: return@launch
+            val language = appLanguage.observe().first()
             _state.update {
                 if (it.regionId != regionId) {
                     it
                 } else {
-                    it.copy(name = AreaLabels.region(regionId, feature.displayName))
+                    // Prefer the bundle name in the interface language — displayName always
+                    // favours Polish, which leaks into an English UI (V3.5.6).
+                    it.copy(name = AreaLabels.region(regionId, feature.nameIn(language)))
                 }
             }
         }

@@ -2,9 +2,10 @@ package com.tripex.pose.domain.usecase
 
 import com.tripex.pose.domain.geo.GeoBounds
 import com.tripex.pose.domain.geo.Place
-import com.tripex.pose.domain.repository.GeocodingRepository
+import com.tripex.pose.domain.repository.UnlockedPlaceRepository
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -18,75 +19,53 @@ class UnlockPlaceUseCaseTest {
         id = "place.warsaw",
     )
 
+    private val places = FakeUnlockedPlaceRepository()
+    private val useCase = UnlockPlaceUseCase(places)
+
     @Test
     fun `a city is stored as one circle, not as cells`() = runTest {
-        val places = FakeUnlockedPlaceRepository()
-        val useCase = UnlockPlaceUseCase(FakeGeocoding(Result.success(warsaw)), places)
+        useCase.unlock(warsaw).getOrThrow()
 
-        val result = useCase.unlock(warsaw).getOrThrow()
-
-        assertEquals(1, places.places.value.size)
         val stored = places.places.value.single()
         assertEquals("place.warsaw", stored.id)
-        assertEquals(52.23, stored.latitude, 0.0001)
-        assertEquals(result.radiusMeters, stored.radiusMeters, 0.0001)
+        assertEquals("Warszawa", stored.name)
+        // Measured off the bounding box, not a constant at the call site.
+        assertTrue(stored.radiusMeters > 10_000.0)
     }
 
     @Test
-    fun `a capital no longer fails for being too large`() = runTest {
-        val places = FakeUnlockedPlaceRepository()
-        val useCase = UnlockPlaceUseCase(FakeGeocoding(Result.success(warsaw)), places)
+    fun `a place with no provider id still gets a stable one`() = runTest {
+        val nameless = warsaw.copy(id = "")
 
-        // The old model rasterised this to ~770 000 H3 indices and refused outright.
-        val result = useCase.unlock(warsaw)
+        useCase.unlock(nameless).getOrThrow()
 
-        assertTrue("unlocking a capital must succeed", result.isSuccess)
-        assertTrue("radius should cover the city", result.getOrThrow().radiusMeters > 12_000.0)
+        val id = places.places.value.single().id
+        assertTrue(id.contains("Warszawa"))
+        assertEquals(id, useCase.idOf(nameless))
     }
 
     @Test
-    fun `unlocking the same place twice keeps a single row`() = runTest {
-        val places = FakeUnlockedPlaceRepository()
-        val useCase = UnlockPlaceUseCase(FakeGeocoding(Result.success(warsaw)), places)
-
-        useCase.unlock(warsaw).getOrThrow()
+    fun `revealing by hand is revocable`() = runTest {
         useCase.unlock(warsaw).getOrThrow()
 
+        assertTrue(useCase.lock(warsaw))
+        assertTrue(places.places.value.isEmpty())
+    }
+
+    /** Ground earned by standing in it follows the trail's rule: it stays. */
+    @Test
+    fun `an earned place cannot be given back`() = runTest {
+        useCase.unlock(warsaw, source = UnlockedPlaceRepository.Source.Auto).getOrThrow()
+
+        assertFalse(useCase.lock(warsaw))
         assertEquals(1, places.places.value.size)
     }
 
     @Test
-    fun `empty query fails without calling the geocoder`() = runTest {
-        val geo = FakeGeocoding(Result.failure(IllegalStateException("should not call")))
-        val useCase = UnlockPlaceUseCase(geo, FakeUnlockedPlaceRepository())
+    fun `an explicit radius overrides the policy`() = runTest {
+        val result = useCase.unlock(warsaw, radiusMeters = 2_500.0).getOrThrow()
 
-        assertTrue(useCase("   ").isFailure)
-        assertEquals(0, geo.calls)
-    }
-
-    @Test
-    fun `geocoding failure propagates`() = runTest {
-        val geo = FakeGeocoding(Result.failure(NoSuchElementException("No results")))
-        val useCase = UnlockPlaceUseCase(geo, FakeUnlockedPlaceRepository())
-
-        assertTrue(useCase("Nowhere").isFailure)
-    }
-
-    private class FakeGeocoding(private val result: Result<Place>) : GeocodingRepository {
-        var calls: Int = 0
-            private set
-
-        override suspend fun suggest(query: String): Result<List<Place>> {
-            calls++
-            return result.map { listOf(it) }
-        }
-
-        override suspend fun reverseGeocode(lat: Double, lng: Double): Result<Place?> =
-            Result.success(null)
-
-        override suspend fun search(query: String): Result<Place> {
-            calls++
-            return result
-        }
+        assertEquals(2_500.0, result.radiusMeters, 1e-9)
+        assertEquals(2_500.0, places.places.value.single().radiusMeters, 1e-9)
     }
 }

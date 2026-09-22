@@ -16,6 +16,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -24,9 +26,13 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.savedstate.compose.LocalSavedStateRegistryOwner
 import com.tripex.pose.domain.geo.ContinentId
 import com.tripex.pose.domain.geo.GeoBounds
+import com.tripex.pose.domain.geo.MapViewport
+import com.tripex.pose.domain.geo.atlas.AdminLevel
+import com.tripex.pose.domain.settings.AppLanguage
 import com.tripex.pose.domain.geo.atlas.BoundaryFields
 import com.tripex.pose.ui.continent.ContinentPalette
 import com.tripex.pose.ui.explore.BoundaryTap
+import com.tripex.pose.ui.map.PlaceTap
 import com.tripex.pose.ui.explore.components.BoundarySurfaceMetrics
 import com.tripex.pose.ui.theme.LocalCartoonStyle
 import com.tripex.pose.ui.theme.LocalRevealStyle
@@ -52,6 +58,9 @@ import org.maplibre.geojson.Feature
 private const val MAP_VIEW_STATE_KEY = "tripail_map_surface_state"
 private const val BOUNDARY_SOURCE_ID = "boundaries"
 private const val FOG_SOURCE_ID = "reveal-source"
+
+/** MapTiler's settlement layer. Stable across style versions, unlike the layer ids. */
+private const val PLACE_SOURCE_LAYER = "place"
 
 private const val FOG_FILL = "reveal-wash"
 private const val FOG_EDGE = "reveal-edge"
@@ -106,15 +115,10 @@ private const val FOG_EDGE_WIDTH = 1.2f
 private const val FOG_EDGE_OPACITY = 0.55f
 
 /**
- * Framing margin as a share of the viewport's shorter side, not a fixed dp value.
- *
- * This is what makes the flight land identically on Luxembourg and on Brazil: the country always
- * ends up filling the same proportion of the screen, whatever its size on the globe.
+ * Framing margins live on [CameraRequest]: a share of the viewport's shorter side, never a fixed
+ * dp value. That is what makes a flight land identically on Luxembourg and on Brazil — the shape
+ * fills the same proportion of the screen whatever its size on the globe.
  */
-private const val CAMERA_PADDING_FRACTION = 0.13f
-
-/** Used only before the surface has been measured. */
-private const val CAMERA_PADDING_DP = 36
 private const val HIT_SLOP_DP = 6
 
 /** Deliberately unhurried: the country level is the one place the camera moves on its own. */
@@ -146,6 +150,8 @@ internal fun TripailMapSurface(
     styleUri: String,
     boundarySourceUri: String,
     onFeatureTap: (BoundaryTap) -> Unit,
+    onPlaceTap: (PlaceTap) -> Unit,
+    language: AppLanguage,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -164,6 +170,7 @@ internal fun TripailMapSurface(
     var style by remember { mutableStateOf<Style?>(null) }
 
     val currentOnTap by rememberUpdatedState(onFeatureTap)
+    val currentOnPlaceTap by rememberUpdatedState(onPlaceTap)
     val currentScene by rememberUpdatedState(host.scene)
 
     val oceanArgb = cartoon.oceanBlue.toArgb()
@@ -197,7 +204,14 @@ internal fun TripailMapSurface(
         }
     }
 
-    AndroidView(factory = { mapView }, modifier = modifier)
+    // The camera cannot be framed against a view that has not been measured — `fitBounds` on a
+    // zero-sized surface produces a nonsense zoom, which is what made entering a continent land
+    // far too far out. Tracking the size lets the pending request apply the moment it is real.
+    var surfaceSize by remember { mutableStateOf(IntSize.Zero) }
+    AndroidView(
+        factory = { mapView },
+        modifier = modifier.onSizeChanged { surfaceSize = it },
+    )
 
     // Built once. Nothing below this point ever rebuilds the style or the layers.
     LaunchedEffect(mapView, styleUri, boundarySourceUri) {
@@ -220,7 +234,7 @@ internal fun TripailMapSurface(
             }
             libreMap.setStyle(builder) { loaded ->
                 BoundarySurfaceMetrics.onStyleBuilt()
-                applyLabelPolicy(loaded)
+                applyLabelPolicy(loaded, language)
                 addFogLayers(loaded, reveal.washColorArgb, reveal.edgeColorArgb, reveal.washOpacity)
                 loaded.addSource(VectorSource(BOUNDARY_SOURCE_ID, boundarySourceUri))
                 addBoundaryLayers(loaded, reveal.washColorArgb)
@@ -228,6 +242,12 @@ internal fun TripailMapSurface(
                 style = loaded
             }
         }
+    }
+
+    // Switching language renames the map in place — no style reload, no camera jump (V3.5.4).
+    LaunchedEffect(style, language) {
+        val loaded = style ?: return@LaunchedEffect
+        applyLabelPolicy(loaded, language)
     }
 
     // Discovering ground rewrites only the wash geometry.
@@ -246,17 +266,63 @@ internal fun TripailMapSurface(
     }
 
     // The camera moves only when something explicitly asked it to, and then exactly once.
-    LaunchedEffect(map, host.cameraRequest) {
+    // Keyed on the measured size too, so a request issued before layout is honoured afterwards
+    // rather than being applied against a zero-sized viewport and silently consumed.
+    LaunchedEffect(map, host.cameraRequest, surfaceSize) {
         val libreMap = map ?: return@LaunchedEffect
         val request = host.cameraRequest ?: return@LaunchedEffect
-        val shorterSide = minOf(mapView.width, mapView.height)
-        val padding = if (shorterSide > 0) {
-            (shorterSide * CAMERA_PADDING_FRACTION).roundToInt()
-        } else {
-            with(density) { CAMERA_PADDING_DP.dp.roundToPx() }
-        }
-        libreMap.frame(request.bounds, padding, request.animate)
+        val shorterSide = minOf(surfaceSize.width, surfaceSize.height)
+        if (shorterSide <= 0) return@LaunchedEffect
+        libreMap.frame(
+            bounds = request.bounds,
+            paddingPx = (shorterSide * request.paddingFraction).roundToInt(),
+            animate = request.animate,
+        )
         host.onCameraApplied(request.token)
+    }
+
+    /**
+     * Reports where the camera settled, so the wash can pick its resolution (`FogLod`).
+     *
+     * Idle, not every frame: the listener fires once the gesture stops, and the flow downstream
+     * is debounced on top of that. Reporting continuously would re-query Room mid-pan.
+     */
+    DisposableEffect(map) {
+        val libreMap = map ?: return@DisposableEffect onDispose { }
+        val listener = MapLibreMap.OnCameraIdleListener {
+            val region = libreMap.projection.visibleRegion.latLngBounds
+            host.onViewportChanged(
+                MapViewport(
+                    bounds = GeoBounds(
+                        north = region.latitudeNorth,
+                        south = region.latitudeSouth,
+                        east = region.longitudeEast,
+                        west = region.longitudeWest,
+                    ),
+                    zoom = libreMap.cameraPosition.zoom,
+                ),
+            )
+        }
+        libreMap.addOnCameraIdleListener(listener)
+        onDispose { libreMap.removeOnCameraIdleListener(listener) }
+    }
+
+    // Keeps the camera on the continent being explored (V3.3.7). Null means the whole world.
+    LaunchedEffect(map, host.maxBounds) {
+        val libreMap = map ?: return@LaunchedEffect
+        val limit = host.maxBounds
+        runCatching {
+            libreMap.setLatLngBoundsForCameraTarget(
+                limit?.let {
+                    LatLngBounds.from(
+                        it.north.coerceAtMost(MAX_LATITUDE),
+                        it.east.coerceAtMost(MAX_LONGITUDE),
+                        it.south.coerceAtLeast(-MAX_LATITUDE),
+                        it.west.coerceAtLeast(-MAX_LONGITUDE),
+                    )
+                },
+            )
+        }
     }
 
     DisposableEffect(map, style) {
@@ -265,6 +331,14 @@ internal fun TripailMapSurface(
         val listener = MapLibreMap.OnMapClickListener { point ->
             val screen = libreMap.projection.toScreenLocation(point)
             val box = RectF(screen.x - slop, screen.y - slop, screen.x + slop, screen.y + slop)
+
+            // Settlements win over the area they sit in: a label is a smaller, more deliberate
+            // target than the country behind it (V3.3.4).
+            val place = libreMap.placeAt(box)
+            if (place != null) {
+                currentOnPlaceTap(place)
+                return@OnMapClickListener true
+            }
             val tap = libreMap.boundaryAt(box, currentScene)
             if (tap != null) currentOnTap(tap)
             tap != null
@@ -282,21 +356,28 @@ private fun oceanStyleJson(oceanColor: Int): String {
     """.trimIndent()
 }
 
-private fun applyLabelPolicy(style: Style) {
-    // Vision §4: the map speaks Polish. MapTiler ships `name:pl` on its label layers, so every
-    // surviving symbol layer is pointed at it with the English `name` as fallback.
-    val polishName = Expression.coalesce(
-        Expression.get("name:pl"),
-        Expression.get("name_pl"),
-        Expression.get("name"),
-    )
+/**
+ * Points every surviving label layer at the chosen language (V3.5.4).
+ *
+ * Applied as a **property change on existing layers**, never by reloading the style: a reload
+ * drops the camera back to the style's default position and flickers every tile, which is a
+ * heavy price for renaming a city.
+ *
+ * The fallback chain matters as much as the first choice. Not every feature carries every
+ * translation, and a label that resolves to nothing renders as an empty string — a nameless
+ * city is worse than one named in the wrong language.
+ */
+private fun applyLabelPolicy(style: Style, language: AppLanguage) {
+    val tags = language.mapNameTags
+    val localisedName = Expression.coalesce(*tags.map { Expression.get(it) }.toTypedArray())
+
     for (layer in style.layers) {
         if (layer !is SymbolLayer) continue
         val id = layer.id.lowercase(Locale.ROOT)
         if (AREA_LABEL_MARKERS.any { id.contains(it) }) {
             layer.setProperties(PropertyFactory.visibility(Property.NONE))
         } else {
-            runCatching { layer.setProperties(PropertyFactory.textField(polishName)) }
+            runCatching { layer.setProperties(PropertyFactory.textField(localisedName)) }
         }
     }
 }
@@ -402,8 +483,9 @@ private fun applyScene(style: Style, scene: MapScene) {
         style.filter(ADM1_FILL_SELECTED, Expression.all(inCountry, Expression.eq(adm1Id, selected)))
         style.filter(ADM1_LINE_SELECTED, Expression.all(inCountry, Expression.eq(adm1Id, selected)))
         style.show(ADM1_LINE)
-        // At the country level the region outlines are there to be read, not tapped: their fills
-        // stay off so a tap still resolves to a country (see `boundaryAt`).
+        // Region fills stay on at the country level as well, so a region can be tapped without
+        // first pressing anything (V3.3.2). `boundaryAt` queries them before the countries and
+        // falls through, which is what keeps the neighbouring country reachable (V3.3.3).
         if (scene.showsRegions) {
             style.show(ADM1_FILL_HIT, ADM1_FILL_SELECTED, ADM1_LINE_SELECTED)
         } else {
@@ -466,24 +548,75 @@ private fun Style.hide(vararg ids: String) = ids.forEach { visible(it, false) }
 private fun Style.show(vararg ids: String) = ids.forEach { visible(it, true) }
 
 /** The project's only hit-test against rendered tiles — a pointer, never a geometry source. */
+/**
+ * Resolves a tap to the **narrowest** thing under the finger (V3.3.2, V3.3.3).
+ *
+ * Regions are queried first, then countries. That order is the whole behaviour: inside the open
+ * country a region wins, and anywhere else the query falls through to the country underneath —
+ * so the neighbour across the border is always one tap away, even while a region is selected.
+ * The old code picked a single layer set from a mode flag, which is why it could only ever offer
+ * one of the two.
+ */
 private fun MapLibreMap.boundaryAt(box: RectF, scene: MapScene): BoundaryTap? {
-    val layerIds = if (scene.showsRegions) {
-        arrayOf(ADM1_FILL_HIT, ADM1_FILL_SELECTED)
-    } else {
-        arrayOf(ADM0_FILL_HIT, ADM0_FILL_SELECTED)
+    if (scene.showsRegions) {
+        regionAt(box)?.let { return it }
     }
-    val idField = if (scene.showsRegions) BoundaryFields.ADM1_ID else BoundaryFields.ADM0_ID
-    val nameField = if (scene.showsRegions) BoundaryFields.ADM1_NAME else BoundaryFields.ADM0_NAME
-    val namePlField =
-        if (scene.showsRegions) BoundaryFields.ADM1_NAME_PL else BoundaryFields.ADM0_NAME_PL
+    return countryAt(box)
+}
 
-    val feature = queryRenderedFeatures(box, *layerIds).firstOrNull() ?: return null
-    val id = feature.str(idField) ?: return null
+private fun MapLibreMap.regionAt(box: RectF): BoundaryTap? {
+    val feature = queryRenderedFeatures(box, ADM1_FILL_HIT, ADM1_FILL_SELECTED).firstOrNull()
+        ?: return null
+    val id = feature.str(BoundaryFields.ADM1_ID) ?: return null
     return BoundaryTap(
         featureId = id,
-        name = feature.str(namePlField) ?: feature.str(nameField) ?: id,
+        name = feature.str(BoundaryFields.ADM1_NAME_PL) ?: feature.str(BoundaryFields.ADM1_NAME) ?: id,
+        level = AdminLevel.Adm1,
         countryIso2 = feature.str(BoundaryFields.ADM1_COUNTRY),
+    )
+}
+
+private fun MapLibreMap.countryAt(box: RectF): BoundaryTap? {
+    val feature = queryRenderedFeatures(box, ADM0_FILL_HIT, ADM0_FILL_SELECTED).firstOrNull()
+        ?: return null
+    val id = feature.str(BoundaryFields.ADM0_ID) ?: return null
+    return BoundaryTap(
+        featureId = id,
+        name = feature.str(BoundaryFields.ADM0_NAME_PL) ?: feature.str(BoundaryFields.ADM0_NAME) ?: id,
+        level = AdminLevel.Adm0,
+        countryIso2 = id,
         continentId = feature.str(BoundaryFields.ADM0_CONTINENT),
+    )
+}
+
+/**
+ * A settlement label or icon under the finger (V3.3.4).
+ *
+ * The basemap's own `place` source-layer is queried, not our boundary tiles — which is why the
+ * layers are found by their **source layer** rather than by id. MapTiler's style names are not a
+ * stable contract and have changed between style versions; `place` is.
+ */
+private fun MapLibreMap.placeAt(box: RectF): PlaceTap? {
+    val style = style ?: return null
+    val placeLayers = style.layers
+        .filterIsInstance<SymbolLayer>()
+        .filter { it.sourceLayer == PLACE_SOURCE_LAYER }
+        .map { it.id }
+    if (placeLayers.isEmpty()) return null
+
+    val feature = queryRenderedFeatures(box, *placeLayers.toTypedArray()).firstOrNull() ?: return null
+    val name = feature.str("name:pl")
+        ?: feature.str("name:en")
+        ?: feature.str("name")
+        ?: return null
+    val point = feature.geometry() as? org.maplibre.geojson.Point ?: return null
+
+    return PlaceTap(
+        name = name,
+        latitude = point.latitude(),
+        longitude = point.longitude(),
+        // `class` is MapTiler's own categorisation: city, town, village, suburb…
+        placeClass = feature.str("class"),
     )
 }
 
@@ -510,3 +643,4 @@ private fun MapLibreMap.frame(bounds: GeoBounds, paddingPx: Int, animate: Boolea
 }
 
 private const val MAX_LATITUDE = 85.0
+private const val MAX_LONGITUDE = 180.0

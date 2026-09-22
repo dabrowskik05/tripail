@@ -30,9 +30,6 @@ internal class UnlockedAreaRepositoryImpl @Inject constructor(
     override fun observeDetailed(viewportCells: Set<Long>): Flow<List<Long>> =
         dao.observeDetailed(viewportCells)
 
-    override fun observeAllDetailed(limit: Int): Flow<List<Long>> =
-        dao.observeAllDetailed(limit)
-
     override fun observeMid(viewportCells: Set<Long>): Flow<List<Long>> =
         dao.observeMid(viewportCells)
 

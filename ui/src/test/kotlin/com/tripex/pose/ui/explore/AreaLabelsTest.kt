@@ -1,5 +1,6 @@
 package com.tripex.pose.ui.explore
 
+import java.util.Locale
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -10,6 +11,13 @@ class AreaLabelsTest {
         // Locale-dependent wording, so assert only that a real name replaced the code.
         val name = AreaLabels.country("PL")
         assertEquals(false, name.equals("PL", ignoreCase = true))
+    }
+
+    /** The interface language decides, not the device's — see `AppLanguageApplier` (V3.5.6). */
+    @Test
+    fun `country names follow the locale they are asked for`() {
+        assertEquals("Germany", AreaLabels.country("DE", locale = Locale.ENGLISH))
+        assertEquals("Niemcy", AreaLabels.country("DE", locale = Locale.forLanguageTag("pl")))
     }
 
     @Test

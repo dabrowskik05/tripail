@@ -5,6 +5,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.tripex.pose.domain.geo.GeoBounds
+import com.tripex.pose.domain.geo.MapViewport
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Bridge between the navigation graph and the single MapLibre instance.
@@ -24,6 +28,26 @@ class MapHostState {
         internal set
 
     var cameraRequest: CameraRequest? by mutableStateOf(null)
+        private set
+
+    /**
+     * Where the camera settled last.
+     *
+     * The wash reads this to decide which resolution to draw the trail at (`FogLod`). It is a
+     * flow rather than Compose state because its only consumer is a `ViewModel` pipeline, and
+     * recomposing the map on every camera idle would be pointless work.
+     */
+    private val _viewport = MutableStateFlow(MapViewport.WORLD)
+    val viewport: StateFlow<MapViewport> = _viewport.asStateFlow()
+
+    /**
+     * Box the camera may not leave, or `null` for the whole world (V3.3.7).
+     *
+     * Set when a continent is being explored, so panning cannot wander off onto neighbouring,
+     * still-fogged continents. Cleared whenever there is no continent in context — a camera
+     * locked into a box nobody can unlock is worse than no lock at all.
+     */
+    var maxBounds: GeoBounds? by mutableStateOf(null)
         private set
 
     /**
@@ -59,13 +83,30 @@ class MapHostState {
         this.scene = scene
     }
 
+    internal fun onViewportChanged(value: MapViewport) {
+        _viewport.value = value
+    }
+
+    fun limitTo(bounds: GeoBounds?) {
+        maxBounds = bounds
+    }
+
     /**
      * Asks the camera to frame [bounds]. The only way the camera ever moves on its own — and it
      * is deliberately awkward to reach from a selection handler.
      */
-    fun flyTo(bounds: GeoBounds, animate: Boolean = true) {
+    /**
+     * @param fill true when [bounds] is the subject of the screen rather than context, so the
+     *   shape should reach the edges (V3.3.5).
+     */
+    fun flyTo(bounds: GeoBounds, animate: Boolean = true, fill: Boolean = false) {
         cameraToken += 1
-        cameraRequest = CameraRequest(bounds = bounds, animate = animate, token = cameraToken)
+        cameraRequest = CameraRequest(
+            bounds = bounds,
+            animate = animate,
+            token = cameraToken,
+            paddingFraction = if (fill) CameraRequest.FILL_PADDING else CameraRequest.FRAME_PADDING,
+        )
     }
 
     fun onCameraApplied(token: Long) {

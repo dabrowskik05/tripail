@@ -5,9 +5,16 @@ import javax.inject.Inject
 /**
  * Builds a FeatureCollection for the parchment reveal wash FillLayer.
  *
- * - One world polygon with unlocked H3 outer rings as holes (vivid basemap shows through).
- * - Inner rings from H3 multipolygons (unexplored pockets) become separate wash-island Features.
- * - Whole-region unlocks arrive as `extraHoles` and are punched into the same world polygon.
+ * - One world polygon with revealed outer rings as holes (vivid basemap shows through).
+ * - Inner rings (unexplored pockets enclosed by revealed ground) become separate wash Features.
+ *
+ * ### The input must already be unioned
+ *
+ * This class takes a [FogGeometry] straight from [RevealUnion] and nothing else. It used to
+ * accept a second `extraHoles` list for region and city unlocks, which meant two shapes could
+ * land in the same polygon as overlapping holes — and overlapping holes are undefined for the
+ * tessellator, which rendered the overlap as fog. There is deliberately no longer a parameter
+ * that lets a shape reach the renderer without passing through the union first.
  */
 class FogGeoJsonBuilder
     @Inject
@@ -15,15 +22,8 @@ class FogGeoJsonBuilder
         /** Full-world wash with no holes — shown before the first Room emission. */
         fun emptyWorld(): String = build(FogGeometry.EMPTY)
 
-        /**
-         * @param extraHoles outlines of macro-scale unlocks (whole regions). They are punched into
-         *   the same world polygon as the H3 cells, so a region and a walked street behave
-         *   identically from the renderer's point of view.
-         */
-        fun build(
-            outline: FogGeometry,
-            extraHoles: List<List<Pair<Double, Double>>> = emptyList(),
-        ): String {
+        /** @param outline disjoint polygons from [RevealUnion] — never raw, unmerged shapes. */
+        fun build(outline: FogGeometry): String {
             val holes = ArrayList<List<Pair<Double, Double>>>(outline.polygons.size)
             val islands = ArrayList<List<Pair<Double, Double>>>(4)
 
@@ -37,7 +37,7 @@ class FogGeoJsonBuilder
 
             val features =
                 buildString {
-                    append(polygonFeature(listOf(WORLD_RING) + holes + extraHoles))
+                    append(polygonFeature(listOf(WORLD_RING) + holes))
                     for (island in islands) {
                         append(',')
                         append(polygonFeature(listOf(island)))

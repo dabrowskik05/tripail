@@ -27,6 +27,7 @@ class AutoUnlockCityUseCase
     constructor(
         private val geocoding: GeocodingRepository,
         private val unlockedPlaces: UnlockedPlaceRepository,
+        private val unlockPlace: UnlockPlaceUseCase,
         @DefaultDispatcher private val defaultDispatcher: CoroutineDispatcher,
     ) {
         sealed interface Result {
@@ -46,18 +47,13 @@ class AutoUnlockCityUseCase
                     return@withContext Result.AlreadyOwned
                 }
 
-                val radius = RevealRadiusPolicy.radiusMeters(place)
-                unlockedPlaces.unlock(
-                    UnlockedPlaceRepository.UnlockedPlace(
-                        id = id,
-                        name = place.displayName,
-                        latitude = place.latitude,
-                        longitude = place.longitude,
-                        radiusMeters = radius,
-                        unlockedAt = System.currentTimeMillis(),
-                    ),
-                )
-                Result.Unlocked(place.displayName, radius)
+                // Earned by standing here, so "Cover" will refuse it — the same rule that makes
+                // the walked trail permanent.
+                val unlocked = unlockPlace.unlock(
+                    place = place,
+                    source = UnlockedPlaceRepository.Source.Auto,
+                ).getOrElse { return@withContext Result.NothingHere }
+                Result.Unlocked(place.displayName, unlocked.radiusMeters)
             }
 
         private fun Place.isSettlement(): Boolean = kind in SETTLEMENT_KINDS

@@ -7,6 +7,8 @@ import com.tripex.pose.domain.geo.atlas.AtlasRepository
 import com.tripex.pose.domain.geo.atlas.ContinentShape
 import com.tripex.pose.domain.geo.atlas.LandShape
 import com.tripex.pose.domain.map.MapStyleProvider
+import com.tripex.pose.domain.settings.AppLanguage
+import com.tripex.pose.domain.settings.AppLanguageRepository
 import com.tripex.pose.domain.tiles.PmTilesBootstrap
 import com.tripex.pose.domain.usecase.ObserveUnlockedCountUseCase
 import io.mockk.coEvery
@@ -15,6 +17,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -163,5 +166,17 @@ class AppShellViewModelTest {
         atlasRepository = atlasRepository,
         pmTilesBootstrap = pmTilesBootstrap,
         observeUnlockedCount = observeUnlockedCount,
+        appLanguage = FakeAppLanguage(),
     )
+
+    /** Already chosen, so the language picker stays out of these tests' way. */
+    private class FakeAppLanguage(
+        private val chosen: AppLanguage? = AppLanguage.Polish,
+    ) : AppLanguageRepository {
+        override suspend fun selected(): AppLanguage? = chosen
+
+        override fun observe(): Flow<AppLanguage> = flowOf(chosen ?: AppLanguage.DEFAULT)
+
+        override suspend fun set(language: AppLanguage) = Unit
+    }
 }

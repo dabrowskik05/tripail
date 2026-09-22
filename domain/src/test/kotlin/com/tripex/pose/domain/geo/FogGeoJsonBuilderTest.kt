@@ -66,19 +66,24 @@ class FogGeoJsonBuilderTest {
         assertFalse(json.contains("[52.2297,21.0122]"))
     }
 
+    /**
+     * Rewritten with the `extraHoles` parameter it used to exercise.
+     *
+     * Region outlines no longer reach the builder by a side door — they arrive already merged
+     * with everything else by [RevealUnion]. The property that matters is unchanged, and is what
+     * this asserts: the renderer cannot tell a walked street from a whole region, because by the
+     * time it sees them they are holes in one polygon.
+     */
     @Test
-    fun `whole-region outlines are punched into the same world polygon as H3 cells`() {
+    fun `cells and region outlines land in the same world polygon`() {
         val cellRing = listOf(20.0 to 52.0, 20.1 to 52.0, 20.1 to 52.1, 20.0 to 52.0)
         val regionRing = listOf(14.0 to 49.0, 24.0 to 49.0, 24.0 to 55.0, 14.0 to 49.0)
 
-        val json = FogGeoJsonBuilder().build(
-            FogGeometry(listOf(listOf(cellRing))),
-            extraHoles = listOf(regionRing),
-        )
+        val merged = RevealUnion().unionRings(listOf(cellRing, regionRing))
+        val json = builder.build(merged)
 
-        // One Feature, one Polygon: world ring + the cell hole + the region hole.
+        // One Feature, one Polygon: world ring plus the merged holes.
         assertEquals(1, json.split("\"type\":\"Feature\"").size - 1)
-        assertTrue("cell hole missing", json.contains("[20.1,52.1]"))
-        assertTrue("region hole missing", json.contains("[24.0,55.0]"))
+        assertTrue("region hole missing", json.contains("24.0,55.0"))
     }
 }

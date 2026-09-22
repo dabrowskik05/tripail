@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tracking_channel_name">Exploring the world</string>
+    <string name="tracking_channel_description">Notification shown while location tracking is active</string>
+    <string name="tracking_notification_title">You are exploring</string>
+    <string name="tracking_notification_starting">Starting tracking…</string>
+    <string name="tracking_notification_active">Exploring</string>
+    <string name="tracking_notification_stop">Stop</string>
+    <string name="tracking_notification_permission_missing">Tracking stopped — no permission</string>
+    <string name="tracking_notification_no_signal">No GPS signal — searching again</string>
+</resources>

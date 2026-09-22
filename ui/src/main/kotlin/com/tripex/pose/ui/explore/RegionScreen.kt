@@ -13,11 +13,13 @@ import com.tripex.pose.ui.explore.components.AreaStatsPanel
 import com.tripex.pose.ui.map.host.MapHostState
 import com.tripex.pose.ui.map.host.MapLevel
 import com.tripex.pose.ui.map.host.MapScene
+import com.tripex.pose.ui.shell.chrome.AppChromeState
 import kotlinx.coroutines.flow.collectLatest
 
 @Composable
 fun RegionRoute(
     host: MapHostState,
+    chrome: AppChromeState,
     onOpenMap: (AreaKey, GeoBounds, String) -> Unit,
     onBack: () -> Unit,
     viewModel: RegionViewModel = hiltViewModel(),
@@ -34,6 +36,7 @@ fun RegionRoute(
 
     BoundaryMapScreen(
         host = host,
+        chrome = chrome,
         scene = MapScene(
             level = MapLevel.Region,
             continentId = state.map.continentId,
@@ -48,16 +51,15 @@ fun RegionRoute(
             flag = state.flag,
             title = state.name,
             coverage = state.coverage,
-            onExplore = { viewModel.onIntent(RegionContract.Intent.ExploreRequested) },
-            secondaryLabel = stringResource(
+            actionLabel = stringResource(
                 when {
                     state.isUnlocking -> R.string.area_region_unlocking
                     state.isUnlocked -> R.string.area_region_cover
                     else -> R.string.area_region_unlock
                 },
             ),
-            // Always live except mid-write: unlocking a region must be undoable from the same spot.
-            onSecondary = if (state.isUnlocking) {
+            // Always live except mid-write: revealing a region must be undoable from the same spot.
+            onAction = if (state.isUnlocking) {
                 null
             } else {
                 { viewModel.onIntent(RegionContract.Intent.ToggleRegionUnlock) }

@@ -9,6 +9,7 @@ targetSdk = "36"
 androidxCore = "1.19.0"
 androidxLifecycle = "2.11.0"
 androidxActivity = "1.13.0"
+androidxAppcompat = "1.7.1"
 androidxComposeBom = "2026.09.00"
 androidxHilt = "1.4.0"
 androidxNavigation = "2.10.1"
@@ -22,6 +23,7 @@ hilt = "2.60.1"
 junit = "4.13.2"
 maplibre = "13.6.1"
 h3 = "4.4.0"
+jts = "1.20.0"
 retrofit = "3.0.0"
 okhttp = "5.5.0"
 serialization = "1.9.0"
@@ -37,6 +39,8 @@ detekt = "1.23.8"
 javax-inject = { module = "javax.inject:javax.inject", version.ref = "javaxInject" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidxActivity" }
+# Per-app language on every supported API level (V3.5.1).
+androidx-appcompat = { module = "androidx.appcompat:appcompat", version.ref = "androidxAppcompat" }
 
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "androidxComposeBom" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
@@ -73,6 +77,10 @@ maplibre-android = { module = "org.maplibre.gl:android-sdk", version.ref = "mapl
 # JVM tests: com.uber:h3 (desktop natives).
 h3-android = { module = "com.uber:h3-android", version.ref = "h3" }
 h3-jvm = { module = "com.uber:h3", version.ref = "h3" }
+
+# Polygon boolean ops for the reveal union (V3.1.1). Pure Java, no Android deps,
+# so :domain stays a plain JVM module.
+jts-core = { module = "org.locationtech.jts:jts-core", version.ref = "jts" }
 
 retrofit = { module = "com.squareup.retrofit2:retrofit", version.ref = "retrofit" }
 retrofit-kotlinx-serialization = { module = "com.squareup.retrofit2:converter-kotlinx-serialization", version.ref = "retrofit" }

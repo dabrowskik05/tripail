@@ -2,6 +2,7 @@ package com.tripex.pose.ui.map.host
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.tripex.pose.domain.geo.MapViewport
 import com.tripex.pose.domain.geo.atlas.BoundaryTilesProvider
 import com.tripex.pose.domain.map.MapStyleProvider
 import com.tripex.pose.domain.usecase.ObserveFogGeoJsonUseCase
@@ -17,7 +18,10 @@ import kotlinx.coroutines.launch
  * one global parchment stream.
  *
  * There is exactly one subscription to the wash for the whole app. Each level used to open its
- * own, which meant three copies of a 20 000-cell GeoJSON string being rebuilt in parallel.
+ * own, which meant three copies of the GeoJSON string being rebuilt in parallel.
+ *
+ * The wash follows the camera, but only to pick a **resolution** — never to decide how much of
+ * the trail exists. See `FogLod`.
  */
 @HiltViewModel
 class MapHostViewModel @Inject constructor(
@@ -31,12 +35,18 @@ class MapHostViewModel @Inject constructor(
     private val _boundarySourceUri = MutableStateFlow(tilesProvider.styleSourceUri())
     val boundarySourceUri: StateFlow<String> = _boundarySourceUri.asStateFlow()
 
-    private val _fogGeoJson = MutableStateFlow("")
+    private val _fogGeoJson = MutableStateFlow(observeFogGeoJson.emptyWorld())
     val fogGeoJson: StateFlow<String> = _fogGeoJson.asStateFlow()
+
+    private val viewport = MutableStateFlow(MapViewport.WORLD)
 
     init {
         viewModelScope.launch {
-            observeFogGeoJson.global().collect { _fogGeoJson.value = it }
+            observeFogGeoJson(viewport).collect { _fogGeoJson.value = it }
         }
+    }
+
+    fun onViewportChanged(value: MapViewport) {
+        viewport.value = value
     }
 }

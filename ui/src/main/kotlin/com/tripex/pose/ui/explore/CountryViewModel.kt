@@ -11,6 +11,7 @@ import com.tripex.pose.domain.geo.atlas.AdminLevel
 import com.tripex.pose.domain.geo.atlas.AreaKey
 import com.tripex.pose.domain.geo.atlas.BoundaryGeometrySource
 import com.tripex.pose.domain.geo.projection.GeometryOps
+import com.tripex.pose.domain.settings.AppLanguageRepository
 import com.tripex.pose.domain.usecase.ObserveAreaCoverageUseCase
 import com.tripex.pose.ui.navigation.Country
 import com.tripex.pose.ui.navigation.bounds
@@ -22,13 +23,22 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * Country level (M3.2). Selecting a different country stays on this destination — it is a filter
- * change on the existing layers plus a fresh coverage subscription, never a new screen.
+ * Country level. Selecting a different country stays on this destination — it is a filter change
+ * on the existing layers plus a fresh coverage subscription, never a new screen.
+ *
+ * ### No modes (V3.3.1–V3.3.3)
+ *
+ * There used to be a "Regions" button that swapped the level between two states: tap a region, or
+ * tap a country, never both. Regions are now live from the moment the country opens, and the hit
+ * test resolves the ambiguity by geography rather than by mode — a region **inside this country**
+ * wins, anything else falls through to the country underneath. So the neighbour across the border
+ * stays one tap away even while a region is selected, which the mode switch made impossible.
  *
  * This is the one level where the camera moves by itself (vision, level 3): picking a country
  * flies slowly onto it. Every deeper level leaves the camera exactly where the player left it.
@@ -38,6 +48,7 @@ class CountryViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val boundaries: BoundaryGeometrySource,
     private val observeAreaCoverage: ObserveAreaCoverageUseCase,
+    private val appLanguage: AppLanguageRepository,
     private val logger: Logger,
 ) : ViewModel() {
 
@@ -51,7 +62,6 @@ class CountryViewModel @Inject constructor(
             bounds = route.bounds(),
             map = BoundaryMapState(
                 continentId = route.continentId.ifBlank { null },
-                mode = BoundaryMode.Countries,
                 selectedId = route.iso2,
             ),
         ),
@@ -73,39 +83,26 @@ class CountryViewModel @Inject constructor(
     fun onIntent(intent: CountryContract.Intent) {
         when (intent) {
             is CountryContract.Intent.FeatureTapped -> onTap(intent.tap)
-            CountryContract.Intent.ShowRegions -> _state.update {
-                it.copy(map = it.map.copy(mode = BoundaryMode.Regions(it.iso2), selectedId = null))
-            }
-            CountryContract.Intent.ShowCountries -> _state.update {
-                it.copy(map = it.map.copy(mode = BoundaryMode.Countries, selectedId = it.iso2))
-            }
-            CountryContract.Intent.ExploreRequested -> {
-                val current = _state.value
-                viewModelScope.launch {
-                    // Outline is read here, once, because the map screen needs somewhere to look —
-                    // not on every selection.
-                    val bounds = current.bounds ?: boundsOf(AdminLevel.Adm0, current.iso2) ?: return@launch
-                    _effects.send(
-                        CountryContract.Effect.OpenMap(
-                            area = AreaKey.Country(current.iso2),
-                            bounds = bounds,
-                            label = current.name,
-                        ),
-                    )
-                }
-            }
-        }
-    }
-
-    private fun onTap(tap: BoundaryTap) {
-        when (_state.value.map.mode) {
-            BoundaryMode.Countries -> selectCountry(tap)
-            is BoundaryMode.Regions -> openRegion(tap)
         }
     }
 
     /**
-     * M3.2 pt 4: another country is a selection change, not a level change.
+     * One tap, two possible meanings, resolved by what was actually hit.
+     *
+     * The surface reports the narrowest feature under the finger. A region only counts when it
+     * belongs to the country currently open — a region of the neighbour would be a level the
+     * player has not entered yet, so the tap falls through to selecting that country instead.
+     */
+    private fun onTap(tap: BoundaryTap) {
+        when {
+            tap.level == AdminLevel.Adm1 && tap.countryIso2 == _state.value.iso2 -> openRegion(tap)
+            tap.level == AdminLevel.Adm1 -> tap.countryIso2?.let { selectCountry(tap.copy(featureId = it)) }
+            else -> selectCountry(tap)
+        }
+    }
+
+    /**
+     * Another country is a selection change, not a level change.
      *
      * The visible part is free — the name rides in on the tapped feature and the highlight is a
      * filter swap. The outline is read off the main thread purely to frame the camera, and the
@@ -175,8 +172,13 @@ class CountryViewModel @Inject constructor(
         if (!AreaLabels.country(iso2).equals(iso2, ignoreCase = true)) return
         viewModelScope.launch {
             val feature = boundaries.feature(AdminLevel.Adm0, iso2) ?: return@launch
+            val language = appLanguage.observe().first()
             _state.update {
-                if (it.iso2 != iso2) it else it.copy(name = AreaLabels.country(iso2, feature.displayName))
+                if (it.iso2 != iso2) {
+                    it
+                } else {
+                    it.copy(name = AreaLabels.country(iso2, feature.nameIn(language)))
+                }
             }
         }
     }

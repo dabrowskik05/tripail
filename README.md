@@ -1,67 +1,159 @@
 # Tripail
 
-**A fog-of-war map for the real world.** Undiscovered land looks like aged parchment;
-walk somewhere and that patch snaps back to vivid map colour — permanently.
+Android app that covers the world map in fog of war and permanently reveals the
+areas you have actually visited. Built with Kotlin, Jetpack Compose, Clean
+Architecture, Room, MapLibre, Uber H3 and MapTiler.
 
-[![Kotlin](https://img.shields.io/badge/Kotlin-2.4-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
-[![Platform](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)](https://developer.android.com)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[Polish version](README_PL.md)
 
 ---
 
-## What it is
+## Download / Demo
 
-Tripail turns exploring into a map you fill in yourself. A parchment wash covers places
-you have never visited. As you move through the real world, the app records where you have
-been and punches permanent holes in that wash so the vivid basemap shows through.
+**APK available in this repository** (and in GitHub Releases when published).
 
-There is no score, no streak and no social feed — just a personal map that gets more interesting
-the more of the world you have actually walked.
+Requires Android 8.0+ (`armeabi-v7a` / `arm64-v8a`). No account. Grant location
+permission and the map starts clearing as you move.
+
+---
+
+## What it does
+
+- The map starts fully fogged.
+- Every GPS fix unlocks a corridor around your position and stores it locally.
+- You can also search for a city, region or country and reveal it manually.
+- Coverage is shown at four levels: world → continent → country → region.
+
+Visited ground is indexed with [Uber H3](https://h3geo.org). Background tracking
+runs in a `location` foreground service so the trail continues with the app in
+the background.
+
+---
 
 ## Features
 
-- **Parchment reveal** — desaturated wash over the world; unlocked H3 cells are geographic holes
-  into the full-colour MapLibre basemap (not a black fog overlay).
-- **Reveal as you walk** — a battery-conscious foreground service follows your position and opens
-  the map in real time along your route.
-- **Unlock a city by name** — search for any place and uncover a radius around it.
-- **Continent overview** — after loading, a cartoon SVG world shows real per-continent coverage;
-  explore opens MapLibre centred on that continent (back returns to the overview).
-- **Cartoon shell UI** — Tripail loading logo (Fredoka), pill search, FAB menu, sheets and dialogs.
-- **Tiny footprint** — visited history is a set of 64-bit H3 indices.
-- **Location stays on your device** — local Room only; Nominatim search sends just the typed text.
+- **Fog of war** — one MapLibre fill layer over the world; unlocked areas are
+  punched out as holes in a single GeoJSON source (never one layer per hexagon).
+- **Reveal by walking** — foreground service, ~1 km corridor along the route,
+  gaps between GPS fixes bridged so a lost signal does not leave holes.
+- **Search unlock** — MapTiler geocoding; pick a result, then confirm the reveal.
+- **Coverage stats** — percentages per continent, country and region from the
+  same spatial index used for rendering.
+- **Polish / English** — UI, map labels and geocoder follow the same setting.
+- **Offline-first** — unlocks live in Room; routes are never uploaded.
+- **Battery-conscious tracking** — balanced power, ~10–15 s interval, 50 m
+  minimum displacement.
 
-## How it works
-
-```
-Loading → Continent SVG overview → MapLibre (camera on continent bbox)
-MapLibre Back → Continents
-```
-
-Unlocked cells are outlined with Uber H3 `cellsToMultiPolygon` at walking resolution and fed as
-one GeoJSON source (world polygon with holes). LOD parent indices are never used as outline
-geometry, so hex size stays geographic across zoom.
+---
 
 ## Architecture
 
-Clean Architecture + MVI across `:app`, `:ui`, `:domain`, `:data`, `:core`.
-`:ui` never imports `:data`. Package id remains `com.tripex.pose` (display name is Tripail).
+Clean Architecture + MVI, five Gradle modules:
 
-## Getting started
-
-```bash
-./gradlew assembleDebug
-./gradlew installDebug
-./gradlew test ktlintCheck detekt
+```
+:app      composition root — Application, MainActivity, Hilt, platform services
+:ui       Compose screens, ViewModels, MVI contracts, MapLibre
+:domain   pure Kotlin — models, use cases, repository interfaces
+:data     Room, DAOs, repository impls, H3 wrapper, LocationTracker, Retrofit
+:core     shared utilities, dispatcher qualifiers
 ```
 
-Create `local.properties` with `sdk.dir` and optional `MAPTILER_API_KEY`.
+Dependency rules: `:ui → :domain`, `:data → :domain`, `:domain → nothing`.
+Room entities stop at the repository boundary.
+
+Each screen is a ViewModel with immutable `State`, `Intent`s and one-shot
+`Effect`s.
+
+### Stack
+
+| Concern | Choice |
+|---|---|
+| Language | Kotlin, JDK 17 |
+| UI | Jetpack Compose + Material 3 |
+| Architecture | Clean Architecture + MVI |
+| DI | Hilt |
+| Async | Coroutines + Flow |
+| Persistence | Room + DataStore |
+| Maps | MapLibre GL Android |
+| Spatial index | Uber H3 |
+| Networking | Retrofit + kotlinx.serialization |
+| Geocoding | MapTiler (Room-backed cache) |
+| Boundaries | Local PMTiles bundle |
+| Build | Gradle Kotlin DSL + Version Catalogs |
+
+Google Maps / Mapbox SDKs were skipped on purpose: custom inverted fog needs an
+open GL stack, and Mapbox's licence rules it out for this project.
+
+---
+
+## How unlocks are stored
+
+H3 alone does not scale to whole regions. Ownership is stored two ways:
+
+| Scale | Trigger | Stored as |
+|---|---|---|
+| Micro | GPS fix (~1 km) | `Set<Long>` of H3 indices (res 11) |
+| Macro | region / country | boundary feature id |
+| Macro | searched place | centre + radius |
+
+Both become holes in the same fog polygon. A Polish voivodeship at resolution 11
+is ~17M cells — storing the outline id instead avoids a guaranteed OOM.
+
+---
+
+## Background tracking
+
+A `location`-typed foreground service keeps recording after the app is closed:
+
+1. `stopWithTask="false"` + `START_STICKY`
+2. Persisted tracking intent (survives process death)
+3. Persisted session (trail continues across restart)
+4. Partial wake lock
+
+The app also asks for a battery-optimisation exemption — OEM killers are the
+usual reason tracking goes silent.
+
+---
+
+## Build
+
+```bash
+git clone https://github.com/<your-account>/tripail.git
+cd tripail
+
+# local.properties
+#   sdk.dir=/path/to/Android/Sdk
+#   MAPTILER_API_KEY=your_key   # optional
+
+./gradlew assembleDebug
+./gradlew installDebug
+./gradlew test
+./gradlew ktlintCheck detekt
+```
+
+JDK 17 required. API keys stay in `local.properties` → `BuildConfig`, never in
+git.
+
+More detail: [`docs/`](docs) — map provider, H3, GPS service, geocoding.
+
+---
+
+## Quality
+
+- Unit tests across `:domain`, `:data` and `:ui`
+- ktlint + detekt; missing string translations fail the build
+- GitHub Actions CI on push / PR
+
+Open issues: [TODO.md](TODO.md).
+
+---
 
 ## Attribution
 
-Map tiles by [MapTiler](https://www.maptiler.com) / [MapLibre](https://maplibre.org).
-Search © [OpenStreetMap](https://www.openstreetmap.org/copyright) (Nominatim).
-Spatial index [Uber H3](https://h3geo.org).
+Map tiles: [MapTiler](https://www.maptiler.com) via [MapLibre](https://maplibre.org).  
+Geocoding © MapTiler © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright).  
+Boundaries: [Natural Earth](https://www.naturalearthdata.com).  
+Spatial index: [Uber H3](https://h3geo.org).
 
 ## License
 

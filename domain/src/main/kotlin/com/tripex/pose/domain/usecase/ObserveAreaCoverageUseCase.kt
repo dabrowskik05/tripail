@@ -89,13 +89,13 @@ class ObserveAreaCoverageUseCase
 
                 val navArg = area.toNavArg()
                 val cached = areaStats.denominator(navArg)
-                val resolution = cached?.resolution ?: resolutionFor(rings)
-                val areaCells = areaCells(area, rings, resolution)
-                if (areaCells.isEmpty()) {
+                val measured = measure(area, rings, cached?.resolution ?: resolutionFor(rings))
+                if (measured == null) {
                     emit(AreaCoverage.Unavailable)
                     return@flow
                 }
-                if (cached == null || cached.cellCount != areaCells.size) {
+                val (resolution, areaCells) = measured
+                if (cached == null || cached.cellCount != areaCells.size || cached.resolution != resolution) {
                     areaStats.put(navArg, resolution, areaCells.size)
                 }
 
@@ -149,6 +149,32 @@ class ObserveAreaCoverageUseCase
                 val id = area.boundaryId()
                 if (level == null || id == null) null else boundaries.rings(level, id).getOrNull()
             }
+        }
+
+        /**
+         * Finds a resolution at which this area actually has a denominator (V3.3.8).
+         *
+         * A polyfill keeps only cells whose centre lands inside the polygon, so an area smaller
+         * than one cell measures as nothing — which is how Luxembourg-sized countries ended up
+         * reporting "no data about this area" despite having perfectly good geometry. Stepping
+         * down is bounded and cheap: it only ever runs for areas that proved too small to
+         * measure, and it stops the moment there is something to count.
+         *
+         * @return the resolution that worked and its cells, or `null` when even walking
+         *   resolution finds nothing — at which point the geometry really is degenerate.
+         */
+        private suspend fun measure(
+            area: AreaKey,
+            rings: List<Ring>,
+            startResolution: Int,
+        ): Pair<Int, Set<Long>>? {
+            var resolution: Int? = startResolution
+            while (resolution != null) {
+                val cells = areaCells(area, rings, resolution)
+                if (cells.isNotEmpty()) return resolution to cells
+                resolution = CoverageResolutionPolicy.refined(resolution)
+            }
+            return null
         }
 
         private fun resolutionFor(rings: List<Ring>): Int =

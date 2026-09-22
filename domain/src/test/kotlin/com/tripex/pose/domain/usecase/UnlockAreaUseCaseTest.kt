@@ -29,25 +29,43 @@ class UnlockAreaUseCaseTest {
             assertTrue(h3.bridgeCalls.isEmpty())
         }
 
+    /**
+     * The gap is filled by sweeping the reveal disk along it, not by threading single cells
+     * between the endpoints — a 25 m thread between 2 km disks photographed as separate dots.
+     */
     @Test
-    fun `gap filling unlocks bridge cells between fixes`() =
+    fun `gap filling stamps overlapping disks along the segment`() =
         runTest {
-            val h3 = FakeH3Converter(diskSize = 7, bridgeCells = setOf(100L, 101L, 102L))
+            val h3 = FakeH3Converter(diskSize = 7)
             val repo = FakeUnlockedAreaRepository()
             val useCase = UnlockAreaUseCase(h3, repo)
 
             useCase(location(1.0, 1.0), bridgeFrom = null)
-            val second = useCase(location(1.1, 1.1), bridgeFrom = fix(1.0, 1.0))
+            h3.revealCalls.clear()
+            useCase(location(1.1, 1.1), bridgeFrom = fix(1.0, 1.0))
 
-            assertEquals(1, h3.bridgeCalls.size)
-            assertTrue(second >= 3)
-            assertTrue(repo.unlocked.containsAll(setOf(100L, 101L, 102L)))
+            // The fix itself plus one stamp per interpolated step.
+            assertTrue("expected corridor stamps, got ${h3.revealCalls.size}", h3.revealCalls.size > 1)
+            assertTrue(h3.bridgeCalls.isEmpty())
+        }
+
+    @Test
+    fun `a gap too long to vouch for is left unbridged`() =
+        runTest {
+            val h3 = FakeH3Converter(diskSize = 7)
+            val repo = FakeUnlockedAreaRepository()
+            val useCase = UnlockAreaUseCase(h3, repo)
+
+            // ~110 km north: far past MAX_BRIDGE_DISTANCE_M.
+            useCase(location(2.0, 1.0), bridgeFrom = fix(1.0, 1.0))
+
+            assertEquals("only the fix itself", 1, h3.revealCalls.size)
         }
 
     @Test
     fun `a stale restored fix is not bridged to`() =
         runTest {
-            val h3 = FakeH3Converter(diskSize = 7, bridgeCells = setOf(100L))
+            val h3 = FakeH3Converter(diskSize = 7)
             val repo = FakeUnlockedAreaRepository()
             val useCase = UnlockAreaUseCase(h3, repo)
 
@@ -57,13 +75,13 @@ class UnlockAreaUseCaseTest {
             val session = TrackingSession(lastFix = TrackingSession.Fix(1.0, 1.0, atMs = 0L))
             useCase(location(1.1, 1.1), bridgeFrom = session.bridgeableFix(now))
 
-            assertTrue(h3.bridgeCalls.isEmpty())
+            assertEquals("only the fix itself", 1, h3.revealCalls.size)
         }
 
     @Test
     fun `a fresh restored fix bridges across the restart`() =
         runTest {
-            val h3 = FakeH3Converter(diskSize = 7, bridgeCells = setOf(100L))
+            val h3 = FakeH3Converter(diskSize = 7)
             val repo = FakeUnlockedAreaRepository()
             val useCase = UnlockAreaUseCase(h3, repo)
 
@@ -71,8 +89,7 @@ class UnlockAreaUseCaseTest {
             val session = TrackingSession(lastFix = TrackingSession.Fix(1.0, 1.0, atMs = 0L))
             useCase(location(1.1, 1.1), bridgeFrom = session.bridgeableFix(now))
 
-            assertEquals(1, h3.bridgeCalls.size)
-            assertTrue(repo.unlocked.contains(100L))
+            assertTrue("the trail must continue across a restart", h3.revealCalls.size > 1)
         }
 
     @Test
@@ -117,7 +134,6 @@ class UnlockAreaUseCaseTest {
         }
 
         override fun observeDetailed(viewportCells: Set<Long>): Flow<List<Long>> = flowOf(emptyList())
-        override fun observeAllDetailed(limit: Int): Flow<List<Long>> = observeDetailed(emptySet())
 
         override fun observeMid(viewportCells: Set<Long>): Flow<List<Long>> = flowOf(emptyList())
 
@@ -131,6 +147,7 @@ class UnlockAreaUseCaseTest {
         private val bridgeCells: Set<Long> = emptySet(),
     ) : H3Converter {
         val bridgeCalls = mutableListOf<Pair<Long, Long>>()
+        val revealCalls = mutableListOf<Pair<Double, Double>>()
         override val baseResolution: Int = H3Config.WALKING_RESOLUTION
 
         override suspend fun warmUp() = Unit
@@ -160,7 +177,10 @@ class UnlockAreaUseCaseTest {
             lat: Double,
             lng: Double,
             radiusMeters: Double,
-        ): Set<Long> = revealDisk(lat, lng, k = 1)
+        ): Set<Long> {
+            revealCalls += lat to lng
+            return revealDisk(lat, lng, k = 1)
+        }
 
         override fun bridge(
             from: Long,

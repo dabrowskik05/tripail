@@ -55,7 +55,6 @@ class UnlockedAreaRepositoryImplTest {
             }
 
         override fun observeDetailed(viewportCells: Set<Long>): Flow<List<Long>> = flowOf(emptyList())
-        override fun observeAllDetailed(limit: Int): Flow<List<Long>> = observeDetailed(emptySet())
         override fun observeMid(viewportCells: Set<Long>): Flow<List<Long>> = flowOf(emptyList())
         override fun observeFar(): Flow<List<Long>> = flowOf(emptyList())
         override fun observeCount(): Flow<Int> = count

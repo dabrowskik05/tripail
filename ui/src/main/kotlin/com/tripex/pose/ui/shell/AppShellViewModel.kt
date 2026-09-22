@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.tripex.pose.domain.geo.H3Converter
 import com.tripex.pose.domain.geo.atlas.AtlasRepository
 import com.tripex.pose.domain.map.MapStyleProvider
+import com.tripex.pose.domain.settings.AppLanguageRepository
 import com.tripex.pose.domain.tiles.PmTilesBootstrap
 import com.tripex.pose.domain.usecase.ObserveUnlockedCountUseCase
 import com.tripex.pose.ui.shell.AppShellContract.FailedSignal
@@ -25,6 +26,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 /**
  * Startup gate (M2.2). Emits [Readiness] derived from real signals only — there is no timer and
@@ -39,13 +41,23 @@ class AppShellViewModel @Inject constructor(
     private val atlasRepository: AtlasRepository,
     private val pmTilesBootstrap: PmTilesBootstrap,
     private val observeUnlockedCount: ObserveUnlockedCountUseCase,
+    private val appLanguage: AppLanguageRepository,
 ) : ViewModel() {
 
     private val attempt = MutableStateFlow(0)
 
+    /** Read once: the answer only changes when the player picks, and then they are past it. */
+    private val needsLanguage = MutableStateFlow(false)
+
+    init {
+        viewModelScope.launch { needsLanguage.value = appLanguage.selected() == null }
+    }
+
     val state: StateFlow<AppShellContract.State> = attempt
         .flatMapLatest { readiness() }
-        .map { AppShellContract.State(readiness = it) }
+        .combine(needsLanguage) { readiness, needsPick ->
+            AppShellContract.State(readiness = readiness, needsLanguage = needsPick)
+        }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),

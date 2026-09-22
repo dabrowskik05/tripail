@@ -2,6 +2,7 @@ package com.tripex.pose.service
 
 import android.Manifest
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
@@ -28,6 +29,7 @@ import com.tripex.pose.domain.location.TrackingState
 import com.tripex.pose.domain.location.TrackingStateHolder
 import com.tripex.pose.domain.usecase.AutoUnlockCityUseCase
 import com.tripex.pose.domain.usecase.UnlockAreaUseCase
+import com.tripex.pose.settings.AppLanguageApplier
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineDispatcher
@@ -72,6 +74,7 @@ class TrackingService : Service() {
     @Inject lateinit var trackingIntent: TrackingIntentRepository
     @Inject lateinit var trackingSession: TrackingSessionRepository
     @Inject lateinit var logger: Logger
+    @Inject lateinit var appLanguage: AppLanguageApplier
     @Inject @field:DefaultDispatcher lateinit var defaultDispatcher: CoroutineDispatcher
 
     private val serviceScope by lazy { CoroutineScope(SupervisorJob() + defaultDispatcher) }
@@ -85,11 +88,21 @@ class TrackingService : Service() {
     private var lastNotificationAtMs: Long = 0L
     private var wakeLock: PowerManager.WakeLock? = null
 
+    /**
+     * The context the notification resolves its strings against.
+     *
+     * A service has no Activity, so below API 33 nothing has installed the chosen language on
+     * this process and `getString` would answer in the default one — a Polish notification over
+     * an English app (V3.5.6). Read fresh each time so changing the language in settings is
+     * picked up by the next update rather than at the next service restart.
+     */
+    private val strings: Context get() = appLanguage.localize(this)
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
-        TrackingNotification.ensureChannel(this)
+        TrackingNotification.ensureChannel(strings)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -98,8 +111,8 @@ class TrackingService : Service() {
             this,
             TrackingNotification.NOTIFICATION_ID,
             TrackingNotification.build(
-                this,
-                getString(R.string.tracking_notification_starting),
+                strings,
+                strings.getString(R.string.tracking_notification_starting),
             ),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
         )
@@ -141,7 +154,7 @@ class TrackingService : Service() {
     private fun startIfPermitted(): Int {
         if (!hasFineLocationPermission()) {
             trackingState.update(TrackingState.PermissionMissing)
-            updateNotification(getString(R.string.tracking_notification_permission_missing))
+            updateNotification(strings.getString(R.string.tracking_notification_permission_missing))
             stopTrackingInternal()
             return START_NOT_STICKY
         }
@@ -171,7 +184,7 @@ class TrackingService : Service() {
 
         trackingState.update(TrackingState.Tracking)
         acquireWakeLock()
-        updateNotification(getString(R.string.tracking_notification_active))
+        updateNotification(strings.getString(R.string.tracking_notification_active))
 
         locationJob = serviceScope.launch {
             // Restored *before* the first fix arrives, so the very first fix after a restart can
@@ -192,7 +205,7 @@ class TrackingService : Service() {
                     if (error is SecurityException) {
                         trackingState.update(TrackingState.PermissionMissing)
                         updateNotification(
-                            getString(R.string.tracking_notification_permission_missing),
+                            strings.getString(R.string.tracking_notification_permission_missing),
                         )
                         stopTrackingInternal()
                     } else {
@@ -281,13 +294,13 @@ class TrackingService : Service() {
                     // twice a minute.
                     if (!reported) {
                         logger.w(TAG, "No fix for $silentFor ms — resubscribing")
-                        updateNotification(getString(R.string.tracking_notification_no_signal))
+                        updateNotification(strings.getString(R.string.tracking_notification_no_signal))
                         reported = true
                         restartLocationStream()
                     }
                 } else if (reported) {
                     reported = false
-                    updateNotification(getString(R.string.tracking_notification_active))
+                    updateNotification(strings.getString(R.string.tracking_notification_active))
                 }
             }
         }
@@ -337,15 +350,40 @@ class TrackingService : Service() {
         val now = SystemClock.elapsedRealtime()
         if (now - lastNotificationAtMs < NOTIFICATION_THROTTLE_MS) return
         lastNotificationAtMs = now
-        updateNotification(getString(R.string.tracking_notification_active))
+        updateNotification(strings.getString(R.string.tracking_notification_active))
     }
 
+    /**
+     * Updates the ongoing notification's text.
+     *
+     * Guarded because from Android 13 posting one needs `POST_NOTIFICATIONS`, and the player can
+     * refuse it. Refusing does not stop the tracking — the foreground service runs either way —
+     * it only means there is nothing to update, so this returns instead of throwing.
+     *
+     * The suppression is for the guard being in [canPostNotifications] rather than inline, which
+     * lint cannot follow across a function boundary. The check is real, and the call is wrapped
+     * as well, so a revoked permission mid-flight cannot bring the service down either.
+     */
+    @android.annotation.SuppressLint("MissingPermission")
     private fun updateNotification(text: String) {
-        NotificationManagerCompat.from(this).notify(
-            TrackingNotification.NOTIFICATION_ID,
-            TrackingNotification.build(this, text),
-        )
+        if (!canPostNotifications()) return
+        runCatching {
+            NotificationManagerCompat.from(this).notify(
+                TrackingNotification.NOTIFICATION_ID,
+                TrackingNotification.build(strings, text),
+            )
+        }.onFailure { logger.w(TAG, "Could not update the notification: ${it.message}") }
     }
+
+    private fun canPostNotifications(): Boolean =
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            true
+        } else {
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS,
+            ) == PackageManager.PERMISSION_GRANTED
+        }
 
     private fun hasFineLocationPermission(): Boolean =
         ContextCompat.checkSelfPermission(

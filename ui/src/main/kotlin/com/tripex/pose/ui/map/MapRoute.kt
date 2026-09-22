@@ -8,22 +8,18 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.material3.SnackbarHostState
 import com.tripex.pose.ui.map.host.MapHostState
 import com.tripex.pose.ui.map.host.MapLevel
 import com.tripex.pose.ui.map.host.MapScene
+import com.tripex.pose.ui.shell.chrome.AppChromeState
+import com.tripex.pose.ui.shell.chrome.RegisterChrome
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
-import com.tripex.pose.domain.geo.GeoBounds
-import com.tripex.pose.ui.R
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.collectLatest
@@ -31,18 +27,15 @@ import kotlinx.coroutines.flow.collectLatest
 @Composable
 fun MapRoute(
     host: MapHostState,
-    onOpenCountry: (iso2: String, bounds: GeoBounds, continentId: String) -> Unit =
-        { _, _, _ -> },
-    onBack: () -> Unit = {},
+    chrome: AppChromeState,
+    title: String,
+    onBack: () -> Unit,
     viewModel: MapViewModel = hiltViewModel(),
 ) {
+    RegisterChrome(chrome = chrome, title = title, onBack = onBack)
+
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val snackbarHostState = remember { SnackbarHostState() }
-    val comingSoon = stringResource(R.string.settings_coming_soon)
-
-    BackHandler(onBack = onBack)
-
     // Boundaries step back and the parchment becomes the subject. The camera is deliberately
     // left alone: the country level already framed it, and from there on zooming is the player's
     // business (vision, level 4).
@@ -109,9 +102,6 @@ fun MapRoute(
     LaunchedEffect(viewModel) {
         viewModel.effects.collectLatest { effect ->
             when (effect) {
-                is MapContract.Effect.OpenCountry ->
-                    onOpenCountry(effect.iso2, effect.bounds, effect.continentId)
-                MapContract.Effect.ShowComingSoon -> snackbarHostState.showSnackbar(comingSoon)
                 MapContract.Effect.RequestLocationPermissions -> {
                     locationPermissionLauncher.launch(
                         arrayOf(
@@ -146,11 +136,7 @@ fun MapRoute(
         }
     }
 
-    MapScreen(
-        state = state,
-        onIntent = viewModel::onIntent,
-        snackbarHostState = snackbarHostState,
-    )
+    MapScreen(state = state, onIntent = viewModel::onIntent)
 }
 
 /** Below Android 10 while-in-use *is* background, so there is nothing to grant. */

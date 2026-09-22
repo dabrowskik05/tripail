@@ -20,14 +20,20 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -38,6 +44,9 @@ import com.tripex.pose.domain.geo.GeoBounds
 import com.tripex.pose.ui.R
 import com.tripex.pose.ui.components.ChunkyButton
 import com.tripex.pose.ui.continent.components.ContinentMenuCanvas
+import com.tripex.pose.ui.continent.components.WorldPan
+import com.tripex.pose.ui.shell.chrome.AppChromeState
+import com.tripex.pose.ui.shell.chrome.RegisterChrome
 import com.tripex.pose.ui.theme.LocalCartoonStyle
 import kotlinx.coroutines.flow.collectLatest
 
@@ -57,6 +66,7 @@ private val PanelShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
  */
 @Composable
 fun ContinentMapRoute(
+    chrome: AppChromeState,
     onOpenContinent: (ContinentId, GeoBounds) -> Unit,
     onBack: () -> Unit,
     viewModel: ContinentMapViewModel = hiltViewModel(),
@@ -75,19 +85,24 @@ fun ContinentMapRoute(
 
     val selected = state.selectedContinent
 
-    // With nothing selected this handler stays off, so back falls through to the navigation graph
-    // and lands on the splash — which is where the player came from.
-    BackHandler(enabled = selected != null) {
-        viewModel.onIntent(ContinentMapContract.Intent.ClearSelection)
-    }
+    // Selecting a continent is a layer of state above the level, so back clears it before it
+    // leaves — the same priority order every other level follows (V3.2.3).
+    RegisterChrome(
+        chrome = chrome,
+        title = stringResource(
+            if (selected == null) R.string.continent_world_title else ContinentPalette.label(selected),
+        ),
+        onBack = {
+            if (selected != null) {
+                viewModel.onIntent(ContinentMapContract.Intent.ClearSelection)
+            } else {
+                onBack()
+            }
+        },
+    )
 
-    val goBack: () -> Unit = {
-        if (selected != null) {
-            viewModel.onIntent(ContinentMapContract.Intent.ClearSelection)
-        } else {
-            onBack()
-        }
-    }
+    /** Shared by the drag gesture and the slider; one value, two ways to move it. */
+    var panFraction by remember { mutableStateOf(WorldPan.CENTRE) }
 
     val dim by animateFloatAsState(
         targetValue = if (selected == null) 0f else DIM_FRACTION,
@@ -105,69 +120,18 @@ fun ContinentMapRoute(
             selectedId = selected,
             dimFraction = dim,
             onTap = { viewModel.onIntent(ContinentMapContract.Intent.ContinentClicked(it)) },
+            panFraction = panFraction,
+            onPanFractionChange = { panFraction = it },
             modifier = Modifier.fillMaxSize(),
         )
 
-        Row(
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .safeDrawingPadding()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Surface(shape = CircleShape, color = cartoon.paperBg, shadowElevation = 4.dp) {
-                IconButton(onClick = goBack) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = stringResource(R.string.area_back_cd),
-                        tint = cartoon.inkPrimary,
-                    )
-                }
-            }
-            Surface(shape = CircleShape, color = cartoon.paperBg, shadowElevation = 4.dp) {
-                Text(
-                    text = stringResource(
-                        if (selected == null) {
-                            R.string.continent_world_title
-                        } else {
-                            ContinentPalette.label(selected)
-                        },
-                    ),
-                    style = MaterialTheme.typography.titleLarge,
-                    color = cartoon.inkPrimary,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                )
-            }
-        }
-
-        // No card over an empty ocean: with nothing picked the hint floats on the water, so the
-        // default view is just continents.
-        if (selected == null) {
-            Text(
-                text = stringResource(
-                    if (state.atlasUnavailable) {
-                        R.string.continent_atlas_unavailable
-                    } else {
-                        R.string.continent_hint
-                    },
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-                color = cartoon.inkPrimary,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(horizontal = 24.dp, vertical = 24.dp),
-            )
-        } else {
-            ContinentMenuPanel(
-                state = state,
-                onExplore = { viewModel.onIntent(ContinentMapContract.Intent.ExploreSelected) },
-                modifier = Modifier.align(Alignment.BottomCenter),
-            )
-        }
+        ContinentMenuPanel(
+            state = state,
+            panFraction = panFraction,
+            onPanFractionChange = { panFraction = it },
+            onExplore = { viewModel.onIntent(ContinentMapContract.Intent.ExploreSelected) },
+            modifier = Modifier.align(Alignment.BottomCenter),
+        )
     }
 }
 
@@ -181,11 +145,14 @@ fun ContinentMapRoute(
 @Composable
 private fun ContinentMenuPanel(
     state: ContinentMapContract.State,
+    panFraction: Float,
+    onPanFractionChange: (Float) -> Unit,
     onExplore: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val cartoon = LocalCartoonStyle.current
     val selected = state.selectedContinent
+    val worldSliderDescription = stringResource(R.string.continent_pan_cd)
 
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -231,10 +198,20 @@ private fun ContinentMenuPanel(
             // Going back lives in the top-left arrow, not down here.
             if (selected != null) {
                 ChunkyButton(
-                    text = stringResource(R.string.continent_explore),
+                    text = stringResource(R.string.continent_select),
                     onClick = onExplore,
                 )
             }
+
+            // One axis, one control (V3.6.4). Zoom is fixed here, so dragging offered four
+            // directions of freedom for a single degree of it — and showed no position.
+            Slider(
+                value = panFraction,
+                onValueChange = onPanFractionChange,
+                modifier = Modifier.semantics {
+                    contentDescription = worldSliderDescription
+                },
+            )
         }
     }
 }

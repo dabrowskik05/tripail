@@ -229,7 +229,6 @@ class ObserveAreaCoverageUseCaseTest {
     private class FakeRepository(private val parents: Flow<List<Long>>) : UnlockedAreaRepository {
         override suspend fun unlock(hexes: Set<Long>): Int = 0
         override fun observeDetailed(viewportCells: Set<Long>): Flow<List<Long>> = flowOf(emptyList())
-        override fun observeAllDetailed(limit: Int): Flow<List<Long>> = observeDetailed(emptySet())
         override fun observeMid(viewportCells: Set<Long>): Flow<List<Long>> = flowOf(emptyList())
         override fun observeFar(): Flow<List<Long>> = parents
         override fun observeCount(): Flow<Int> = flowOf(0)

@@ -83,6 +83,21 @@ internal object Migrations {
         }
     }
 
+    /**
+     * Records how a place was unlocked, so "Cover" can refuse the ones that were earned.
+     *
+     * Existing rows become `MANUAL`: every place in the table before this migration came from
+     * the search bar, because automatic city unlocks are the newer feature. Defaulting them to
+     * `AUTO` would freeze choices the player is entitled to undo.
+     */
+    val MIGRATION_5_6 = object : Migration(5, 6) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "ALTER TABLE `unlocked_place` ADD COLUMN `source` TEXT NOT NULL DEFAULT 'MANUAL'",
+            )
+        }
+    }
+
     val ALL: Array<Migration> =
-        arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+        arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
 }

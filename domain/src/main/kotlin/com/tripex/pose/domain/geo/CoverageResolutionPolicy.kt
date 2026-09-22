@@ -31,6 +31,23 @@ object CoverageResolutionPolicy {
     const val RESOLUTION_CONTINENT: Int = 4
 
     /**
+     * Finest resolution worth stepping down to when a polygon turns out to be too small to
+     * contain a single cell centre. Past walking resolution the numbers stop meaning anything.
+     */
+    const val FINEST_RESOLUTION: Int = 11
+
+    /**
+     * Next finer resolution, or `null` at the floor (V3.3.8).
+     *
+     * A polyfill only keeps cells whose **centre** falls inside the polygon, so a country smaller
+     * than one cell — Monaco at resolution 7 — yields an empty denominator and the coverage row
+     * used to read "no data about this area". The geometry was never the problem; the ruler was
+     * too coarse. Refining is safe precisely because it only happens when the area proved tiny.
+     */
+    fun refined(resolution: Int): Int? =
+        if (resolution >= FINEST_RESOLUTION) null else resolution + 1
+
+    /**
      * @param areaKm2 approximate area of the region, e.g. from
      *   [com.tripex.pose.domain.geo.projection.GeometryOps.areaKm2].
      */

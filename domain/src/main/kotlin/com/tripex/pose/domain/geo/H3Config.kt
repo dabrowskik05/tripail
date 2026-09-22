@@ -18,8 +18,30 @@ object H3Config {
      */
     const val WALK_REVEAL_RADIUS_M: Double = 1_000.0
 
-    /** ~1.3 km at res 11 — above this, bridge returns empty. */
+    /** ~1.3 km at res 11 — above this, the cell-path bridge returns empty. */
     const val MAX_BRIDGE_CELLS: Int = 30
+
+    /**
+     * Longest gap between two fixes that still gets filled in, in **metres** (V3.1.7).
+     *
+     * The old limit was counted in cells (`MAX_BRIDGE_CELLS`, ~1.3 km), which is far too tight
+     * for a car: at 100 km/h consecutive fixes are ~420 m apart, so a single dropped fix put the
+     * pair out of range and the bridge vanished without a sound. 20 km covers a lost signal
+     * through a tunnel or a few minutes of motorway; beyond that a straight corridor would claim
+     * ground nobody travelled, and an honest gap is better.
+     */
+    const val MAX_BRIDGE_DISTANCE_M: Double = 20_000.0
+
+    /**
+     * Spacing of the disks swept along the gap, as a fraction of [WALK_REVEAL_RADIUS_M].
+     *
+     * Half a radius guarantees consecutive disks overlap, so the trail is a continuous band
+     * rather than a string of beads. Smaller would be smoother and cost cells for nothing.
+     */
+    const val BRIDGE_STEP_FRACTION: Double = 0.5
+
+    /** Ceiling on interpolated steps, so a long gap cannot balloon into millions of cells. */
+    const val MAX_BRIDGE_STEPS: Int = 64
 
     /**
      * Approximate center-to-center distance of neighboring cells at walking resolution

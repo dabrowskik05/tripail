@@ -5,7 +5,7 @@ import com.tripex.pose.domain.geo.PlaceKind
 import com.tripex.pose.ui.R
 
 /**
- * Polish, user-facing name for a geocoder category.
+ * User-facing name for a geocoder category, in the interface language.
  *
  * Shared by the suggestion list and the detail sheet so the same place is never called two
  * different things, and so no enum name ever reaches the screen (vision §4).

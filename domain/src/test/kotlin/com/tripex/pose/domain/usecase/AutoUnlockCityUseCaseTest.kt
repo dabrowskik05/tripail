@@ -20,8 +20,12 @@ class AutoUnlockCityUseCaseTest {
     private val dispatcher = UnconfinedTestDispatcher()
     private val places = FakePlaces()
 
-    private fun useCase(reverse: Place?) =
-        AutoUnlockCityUseCase(FakeGeocoding(reverse), places, dispatcher)
+    private fun useCase(reverse: Place?) = AutoUnlockCityUseCase(
+        geocoding = FakeGeocoding(reverse),
+        unlockedPlaces = places,
+        unlockPlace = UnlockPlaceUseCase(places),
+        defaultDispatcher = dispatcher,
+    )
 
     @Test
     fun `standing in a city unlocks the whole city`() = runTest(dispatcher) {
@@ -102,6 +106,25 @@ class AutoUnlockCityUseCaseTest {
             Result.failure(NoSuchElementException())
     }
 
+    /** Standing somewhere earns it; the row must say so, or "Cover" would be offered for it. */
+    @Test
+    fun `an automatic unlock is marked as earned`() = runTest(dispatcher) {
+        val city = Place(
+            displayName = "Skierniewice",
+            latitude = 51.95,
+            longitude = 20.15,
+            kind = PlaceKind.City,
+            id = "pl-ski",
+        )
+
+        useCase(city).invoke(city.latitude, city.longitude)
+
+        assertEquals(
+            UnlockedPlaceRepository.Source.Auto,
+            places.stored.value.single().source,
+        )
+    }
+
     private class FakePlaces : UnlockedPlaceRepository {
         val stored = MutableStateFlow<List<UnlockedPlaceRepository.UnlockedPlace>>(emptyList())
 
@@ -114,6 +137,9 @@ class AutoUnlockCityUseCaseTest {
             stored.value = stored.value.filterNot { it.id == id }
             return true
         }
+
+        override suspend fun find(id: String): UnlockedPlaceRepository.UnlockedPlace? =
+            stored.value.firstOrNull { it.id == id }
 
         override fun observeAll(): Flow<List<UnlockedPlaceRepository.UnlockedPlace>> = stored
     }

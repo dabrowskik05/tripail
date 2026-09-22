@@ -21,12 +21,11 @@ internal interface UnlockedHexDao {
     @Query("SELECT DISTINCT parentRes7 FROM unlocked_hex")
     fun observeFar(): Flow<List<Long>>
 
-    /**
-     * Every unlocked cell, newest first, capped. Backs the global wash: discovered ground must be
-     * visible wherever the camera is, not only inside the current viewport.
-     */
-    @Query("SELECT h3Index FROM unlocked_hex ORDER BY discoveredAt DESC LIMIT :limit")
-    fun observeAllDetailed(limit: Int): Flow<List<Long>>
+    // There was a `SELECT … ORDER BY discoveredAt DESC LIMIT :limit` here, backing the global
+    // wash. One GPS fix is ~1800 cells at walking resolution, so a 20 000 cap held about eleven
+    // fixes and everything older silently vanished from the map. It is deleted rather than
+    // raised: the wash now draws coarse parents when the camera is far out (`FogLod`), so there
+    // is no longer any reason to ask for "all cells" — and no query left to reintroduce the bug.
 
     @Query("SELECT COUNT(*) FROM unlocked_hex")
     fun observeCount(): Flow<Int>

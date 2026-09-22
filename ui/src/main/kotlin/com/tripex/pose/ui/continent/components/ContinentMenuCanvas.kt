@@ -57,13 +57,29 @@ internal fun ContinentMenuCanvas(
     dimFraction: Float,
     onTap: (ContinentId?) -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * Where the world sits horizontally, 0 (west) to 1 (east) — see [WorldPan].
+     *
+     * Hoisted out of the canvas so the slider below the map and the drag gesture are two views of
+     * one value rather than two sources of truth fighting each other (V3.6.4).
+     */
+    panFraction: Float = WorldPan.CENTRE,
+    onPanFractionChange: (Float) -> Unit = {},
 ) {
     val density = LocalDensity.current
     val paths = remember(shapes) { shapes.map { it.toPath() } }
     val currentOnTap by rememberUpdatedState(onTap)
+    val currentOnPan by rememberUpdatedState(onPanFractionChange)
 
-    /** Left edge of the world in pixels; `null` until the first layout centres it. */
-    var pan by remember { mutableStateOf<Float?>(null) }
+    /** Size of the last layout pass, needed to turn the fraction into pixels. */
+    var canvasSize by remember { mutableStateOf(androidx.compose.ui.geometry.Size.Zero) }
+
+    /** Left edge of the world in pixels, derived from the hoisted fraction. */
+    val pan: Float? = if (canvasSize.width > 0f) {
+        WorldPan.toPan(panFraction, canvasSize.width, canvasSize.height)
+    } else {
+        null
+    }
 
     val outlinePx = with(density) { OutlineWidth.toPx() }
     val selectedOutlinePx = with(density) { SelectedOutlineWidth.toPx() }
@@ -76,7 +92,10 @@ internal fun ContinentMenuCanvas(
                     val width = size.width.toFloat()
                     val height = size.height.toFloat()
                     val current = pan ?: WorldFit.centeredPan(width, height)
-                    pan = (current + dragAmount).coerceIn(WorldFit.panRange(width, height))
+                    val next = (current + dragAmount).coerceIn(WorldFit.panRange(width, height))
+                    // Reported as a fraction so the slider follows the drag without either one
+                    // driving the other in a loop.
+                    currentOnPan(WorldPan.toFraction(next, width, height))
                     // Consumed so the tap detector does not read a drag as a continent pick.
                     change.consume()
                 }
@@ -90,6 +109,7 @@ internal fun ContinentMenuCanvas(
             },
     ) {
         if (paths.isEmpty()) return@Canvas
+        canvasSize = size
         val fit = WorldFit.of(size.width, size.height, pan)
         if (fit.scale <= 0f) return@Canvas
 

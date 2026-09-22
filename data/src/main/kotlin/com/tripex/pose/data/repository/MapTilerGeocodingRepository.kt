@@ -8,11 +8,12 @@ import com.tripex.pose.data.mapper.toPlace
 import com.tripex.pose.data.network.MapTilerGeocodingApi
 import com.tripex.pose.domain.geo.Place
 import com.tripex.pose.domain.repository.GeocodingRepository
+import com.tripex.pose.domain.settings.AppLanguageRepository
 import javax.inject.Inject
 import javax.inject.Singleton
-import java.util.Locale
 import kotlin.math.abs
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -21,10 +22,21 @@ import kotlinx.serialization.json.Json
  * MapTiler-backed geocoding (M4.4 / M4.7).
  *
  * Two things keep the request count down while typing:
- * - every distinct query is cached in Room, so walking back a character is free and a repeated
- *   search works offline,
+ * - every **non-empty** result is cached in Room, so walking back a character is free and a
+ *   repeated search works offline,
  * - one response is enough to disambiguate homonyms, because MapTiler ships the parent areas in
  *   `context`. There is never a follow-up request per result.
+ *
+ * ### Two bugs this class used to have (V3.4.2)
+ *
+ * **Empty answers were cached for thirty days.** "norwegia" returning nothing once meant it
+ * returned nothing for a month, offline and online alike, while "norwe" kept working because it
+ * had been typed on the way to a result that did come back. An absence of results is not a
+ * result; it is now never written.
+ *
+ * **Only one language was requested**, taken from the device locale. MapTiler indexes country
+ * names per language, so a Polish full name could miss entirely while the prefix matched some
+ * other index. Both languages are asked for, preferred one first.
  */
 @Singleton
 internal class MapTilerGeocodingRepository
@@ -33,27 +45,30 @@ internal class MapTilerGeocodingRepository
         private val api: MapTilerGeocodingApi,
         private val cacheDao: GeocodeCacheDao,
         private val json: Json,
+        private val appLanguage: AppLanguageRepository,
         @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     ) : GeocodingRepository {
 
         override suspend fun suggest(query: String): Result<List<Place>> =
             withContext(ioDispatcher) {
-                // Keyed by locale as well: the same query returns different names per language,
-                // so a shared key would serve Polish results to an English UI and vice versa.
-                val key = cacheKey(query)
                 if (query.trim().length < MIN_QUERY_LENGTH) {
                     return@withContext Result.success(emptyList())
                 }
+                // Keyed by language as well: the same query returns different names per language,
+                // so a shared key would serve Polish results to an English UI and vice versa.
+                val language = language()
+                val key = cacheKey(query, language)
                 readCache(key)?.let { return@withContext Result.success(it) }
 
                 runCatching {
                     val apiKey = BuildConfig.MAPTILER_API_KEY.trim()
                     check(apiKey.isNotEmpty()) { "MAPTILER_API_KEY missing from local.properties" }
-                    api.search(query = query.trim(), key = apiKey, language = language())
+                    api.search(query = query.trim(), key = apiKey, language = language)
                         .features
                         .mapNotNull { it.toPlace() }
                         .deduplicated()
-                        .also { writeCache(key, it) }
+                        // An empty answer is not an answer worth remembering for a month.
+                        .also { if (it.isNotEmpty()) writeCache(key, it) }
                 }
             }
 
@@ -63,15 +78,25 @@ internal class MapTilerGeocodingRepository
                     val apiKey = BuildConfig.MAPTILER_API_KEY.trim()
                     check(apiKey.isNotEmpty()) { "MAPTILER_API_KEY missing from local.properties" }
                     api.reverse(lng = lng, lat = lat, key = apiKey, language = language())
+
                         .features
                         .firstNotNullOfOrNull { it.toPlace() }
                 }
             }
 
-        private fun cacheKey(query: String): String = "${language()}|${query.trim().lowercase()}"
+        private fun cacheKey(query: String, language: String): String =
+            "$language|" + query.trim().lowercase()
 
-        /** Follows the device language so cached names match what the rest of the UI shows. */
-        private fun language(): String = Locale.getDefault().language.ifBlank { "pl" }
+        /**
+         * Follows the **app's** language, not the device's.
+         *
+         * The player can run a Polish interface on an English phone; the names in the suggestion
+         * list have to match the names on the map and in the rest of the UI. Both languages are
+         * sent, preferred one first — asking for one only is why a full Polish country name
+         * could find nothing while its prefix worked.
+         */
+        private suspend fun language(): String =
+            appLanguage.observe().first().geocodingLanguages
 
         override suspend fun search(query: String): Result<Place> =
             suggest(query).mapCatching { places ->

@@ -2,31 +2,43 @@ package com.tripex.pose.domain.usecase
 
 import com.tripex.pose.core.di.DefaultDispatcher
 import com.tripex.pose.domain.geo.FogGeoJsonBuilder
+import com.tripex.pose.domain.geo.FogGeometry
+import com.tripex.pose.domain.geo.FogLod
 import com.tripex.pose.domain.geo.GeoCircle
 import com.tripex.pose.domain.geo.H3Config
 import com.tripex.pose.domain.geo.H3Converter
 import com.tripex.pose.domain.geo.MapViewport
+import com.tripex.pose.domain.geo.RevealUnion
 import com.tripex.pose.domain.geo.atlas.BoundaryGeometrySource
+import com.tripex.pose.domain.geo.atlas.Ring
 import com.tripex.pose.domain.repository.UnlockedAreaRepository
 import com.tripex.pose.domain.repository.UnlockedPlaceRepository
 import com.tripex.pose.domain.repository.UnlockedRegionRepository
+import javax.inject.Inject
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
-import javax.inject.Inject
 
 /**
- * Streams reveal-wash GeoJSON for the current camera.
+ * Streams the reveal-wash GeoJSON for the current camera.
  *
- * Always outlines **walking-resolution** cells so hex size stays geographic across zoom
- * (never substitutes parent res 7/9 indices into [H3Converter.outline]).
+ * Two rules govern this class, both learned the hard way on a real drive:
+ *
+ * 1. **Everything is unioned together, in one pass** (V3.1.5). Walked cells, city circles and
+ *    whole regions go into [RevealUnion] as one list. They used to be punched into the world
+ *    polygon as separate holes, and overlapping holes are undefined for the tessellator — the
+ *    overlap rendered as fog. Merging in stages would leave the same seams, so there is no
+ *    staged path here and no way to hand a shape to the builder unmerged.
+ *
+ * 2. **Nothing is dropped for being old** (V3.1.6). What varies with the camera is the
+ *    *resolution* the trail is drawn at, never how much of it exists. See [FogLod].
  */
 class ObserveFogGeoJsonUseCase
     @Inject
@@ -34,106 +46,126 @@ class ObserveFogGeoJsonUseCase
         private val repository: UnlockedAreaRepository,
         private val h3: H3Converter,
         private val fogGeoJsonBuilder: FogGeoJsonBuilder,
+        private val revealUnion: RevealUnion,
         private val regionRepository: UnlockedRegionRepository,
         private val placeRepository: UnlockedPlaceRepository,
         private val boundaries: BoundaryGeometrySource,
         @DefaultDispatcher private val defaultDispatcher: CoroutineDispatcher,
     ) {
-        /**
-         * World-wide wash, independent of the camera.
-         *
-         * Every level of the app draws the same map, so a hole punched in Czechia has to stay
-         * punched while the player is looking at Poland. The viewport-scoped variant below is for
-         * the explore screen, where the camera is the subject and the cell count can be huge.
-         */
-        fun global(): Flow<String> =
-            combine(
-                repository.observeAllDetailed(MAX_CELLS_PER_OUTLINE),
-                regionRepository.observeAll(),
-                placeRepository.observeAll(),
-            ) { cells, regions, places ->
-                fogGeoJsonBuilder.build(
-                    h3.outline(cells),
-                    regionHoles(regions) + places.map { it.toRing() },
-                )
-            }
-                .distinctUntilChanged()
-                .flowOn(defaultDispatcher)
 
-        @OptIn(ExperimentalCoroutinesApi::class)
+        /** Everything needed to draw one frame of wash. Compared as a whole to skip repeat work. */
+        private data class RevealInput(
+            val lod: FogLod,
+            val cells: List<Long>,
+            val regions: List<UnlockedRegionRepository.UnlockedRegion>,
+            val places: List<UnlockedPlaceRepository.UnlockedPlace>,
+        )
+
+        @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
         operator fun invoke(viewport: Flow<MapViewport>): Flow<String> =
             viewport
                 .debounce(CAMERA_DEBOUNCE_MS)
+                .map { it.toQuery() }
                 .distinctUntilChanged()
-                .flatMapLatest { vp ->
+                .flatMapLatest { query ->
                     combine(
-                        observeWalkingCells(vp),
+                        cellsFor(query),
                         regionRepository.observeAll(),
-                    ) { cells, regions ->
-                        val capped =
-                            if (cells.size > MAX_CELLS_PER_OUTLINE) {
-                                cells.take(MAX_CELLS_PER_OUTLINE)
-                            } else {
-                                cells
-                            }
-                        fogGeoJsonBuilder.build(h3.outline(capped), regionHoles(regions))
+                        placeRepository.observeAll(),
+                    ) { cells, regions, places ->
+                        RevealInput(query.lod, cells, regions, places)
                     }
-                }.flowOn(defaultDispatcher)
+                }
+                // The union is the expensive step; an identical input must not pay for it twice.
+                .distinctUntilChanged()
+                .map { input -> buildJson(input) }
+                .distinctUntilChanged()
+                .flowOn(defaultDispatcher)
+
+        /** Full-world wash with nothing revealed — shown before the first Room emission. */
+        fun emptyWorld(): String = fogGeoJsonBuilder.build(FogGeometry.EMPTY)
 
         /**
-         * Outlines of whole-region unlocks, fetched from the bundle on demand. The database holds
-         * only ids, so this is where a macro unlock turns back into geometry.
+         * What the camera means for the query: which resolution, and which slice of the world.
+         *
+         * The viewport's parent cells are part of the key, so panning inside the same tiles does
+         * not re-query, while panning to new ground does.
          */
-        private suspend fun regionHoles(
-            regions: List<UnlockedRegionRepository.UnlockedRegion>,
-        ): List<List<Pair<Double, Double>>> {
-            if (regions.isEmpty()) return emptyList()
-            val holes = ArrayList<List<Pair<Double, Double>>>(regions.size)
-            for (region in regions.take(MAX_REGION_HOLES)) {
-                val cached = regionRingCache[region.cacheKey()]
-                    ?: boundaries.rings(region.level, region.featureId).getOrNull()
-                        ?.also { regionRingCache[region.cacheKey()] = it }
-                    ?: continue
-                holes += cached
-            }
-            return holes
+        private data class Query(val lod: FogLod, val viewportParents: Set<Long>)
+
+        private fun MapViewport.toQuery(): Query {
+            val lod = FogLod.forZoom(zoom)
+            if (!lod.isViewportScoped) return Query(FogLod.Far, emptySet())
+
+            val parents = h3.cellsForBounds(bounds, H3Config.LOD_FAR_RESOLUTION)
+            // A viewport-scoped query becomes `WHERE parentRes7 IN (…)`, one bind variable per
+            // cell. SQLite refuses past ~999 of them, so a wide viewport would not merely be slow
+            // — it would throw. Past the cap the camera is far enough out that the coarse global
+            // query is the right answer anyway, so fall back to it rather than clamping the set
+            // and silently drawing a slice of what was asked for.
+            if (parents.size > MAX_VIEWPORT_PARENTS) return Query(FogLod.Far, emptySet())
+
+            return Query(lod, parents)
         }
 
-        /** A searched city is one ring, generated on demand from three stored numbers. */
-        private fun UnlockedPlaceRepository.UnlockedPlace.toRing(): List<Pair<Double, Double>> =
-            GeoCircle.ring(lat = latitude, lng = longitude, radiusMeters = radiusMeters)
+        private fun cellsFor(query: Query): Flow<List<Long>> = when (query.lod) {
+            FogLod.Near -> repository.observeDetailed(query.viewportParents)
+            FogLod.Mid -> repository.observeMid(query.viewportParents)
+            // No viewport, no limit: discovered ground stays discovered wherever the camera is.
+            FogLod.Far -> repository.observeFar()
+        }
 
-        private fun UnlockedRegionRepository.UnlockedRegion.cacheKey(): String =
-            "$level:$featureId"
+        private suspend fun buildJson(input: RevealInput): String {
+            val shapes = ArrayList<List<Ring>>(input.regions.size + input.places.size + 8)
+
+            // 1. The walked trail, already merged cell-to-cell by H3 — holes and all.
+            if (input.cells.isNotEmpty()) {
+                shapes += h3.outline(input.cells).polygons
+            }
+            // 2. Whole regions, read back from the bundle on demand (the database holds only ids).
+            for (region in input.regions) {
+                val rings = ringsOf(region) ?: continue
+                // Each ring is treated as its own outline: a region can be several landmasses,
+                // and the union is what decides how they relate.
+                for (ring in rings) shapes += listOf(ring)
+            }
+            // 3. Cities — three stored numbers turned back into a circle.
+            for (place in input.places) {
+                shapes += listOf(GeoCircle.ring(place.latitude, place.longitude, place.radiusMeters))
+            }
+
+            return fogGeoJsonBuilder.build(revealUnion.union(shapes))
+        }
 
         /** Reading an outline means decoding tiles, so each one is read at most once per process. */
+        private suspend fun ringsOf(
+            region: UnlockedRegionRepository.UnlockedRegion,
+        ): List<Ring>? {
+            val key = "${region.level}:${region.featureId}"
+            regionRingCache[key]?.let { return it }
+            val rings = boundaries.rings(region.level, region.featureId).getOrNull() ?: return null
+            regionRingCache[key] = rings
+            return rings
+        }
+
         private val regionRingCache = java.util.Collections.synchronizedMap(
-            object : LinkedHashMap<String, List<List<Pair<Double, Double>>>>(
-                REGION_CACHE_SIZE + 1,
-                0.75f,
-                true,
-            ) {
+            object : LinkedHashMap<String, List<Ring>>(REGION_CACHE_SIZE + 1, 0.75f, true) {
                 override fun removeEldestEntry(
-                    eldest: MutableMap.MutableEntry<String, List<List<Pair<Double, Double>>>>?,
+                    eldest: MutableMap.MutableEntry<String, List<Ring>>?,
                 ): Boolean = size > REGION_CACHE_SIZE
             },
         )
 
-        private fun observeWalkingCells(viewport: MapViewport): Flow<List<Long>> {
-            val parents = h3.cellsForBounds(viewport.bounds, H3Config.LOD_FAR_RESOLUTION)
-            return if (parents.isEmpty()) {
-                flowOf(emptyList())
-            } else {
-                repository.observeDetailed(parents)
-            }
-        }
-
         companion object {
-            const val CAMERA_DEBOUNCE_MS: Long = 400L
-            const val MAX_CELLS_PER_OUTLINE: Int = 20_000
-
-            /** Past this many whole regions the wash is mostly holes anyway. */
-            const val MAX_REGION_HOLES: Int = 64
+            const val CAMERA_DEBOUNCE_MS: Long = 250L
             const val REGION_CACHE_SIZE: Int = 32
+
+            /**
+             * Bind-variable budget for a viewport-scoped query.
+             *
+             * SQLite's default `SQLITE_MAX_VARIABLE_NUMBER` is 999; staying well under it leaves
+             * room for Room's own parameters and for the limit moving between devices.
+             */
+            const val MAX_VIEWPORT_PARENTS: Int = 500
         }
     }

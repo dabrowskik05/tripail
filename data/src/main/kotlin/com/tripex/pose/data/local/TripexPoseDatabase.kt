@@ -11,7 +11,7 @@ import androidx.room.RoomDatabase
         GeocodeCacheEntity::class,
         UnlockedPlaceEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 internal abstract class TripexPoseDatabase : RoomDatabase() {

@@ -14,9 +14,6 @@ interface UnlockedAreaRepository {
 
     fun observeDetailed(viewportCells: Set<Long>): Flow<List<Long>>
 
-    /** All unlocked cells regardless of viewport, capped at [limit]. */
-    fun observeAllDetailed(limit: Int): Flow<List<Long>>
-
     fun observeMid(viewportCells: Set<Long>): Flow<List<Long>>
 
     fun observeFar(): Flow<List<Long>>

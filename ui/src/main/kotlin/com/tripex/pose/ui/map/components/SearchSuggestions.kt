@@ -34,14 +34,31 @@ private val MaxListHeight = 320.dp
  * Each row shows the parent areas alongside the name, which is what makes four places called
  * "Warszawa" tellable apart — and it costs nothing, because the geocoder returns that context in
  * the same response.
+ *
+ * [notFound] is rendered rather than ignored: a search that returns nothing has to say so.
+ * Silence used to be the symptom of a real bug (V3.4.3), and it is indistinguishable from one.
  */
 @Composable
 internal fun SearchSuggestions(
     suggestions: List<Place>,
+    notFound: Boolean,
     onPick: (Place) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    if (suggestions.isEmpty()) return
+    val cartoon0 = LocalCartoonStyle.current
+    if (suggestions.isEmpty()) {
+        if (notFound) {
+            Surface(modifier = modifier.fillMaxWidth(), shape = ListShape, color = cartoon0.paperBg) {
+                Text(
+                    text = stringResource(R.string.search_not_found),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = cartoon0.inkPrimary,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+                )
+            }
+        }
+        return
+    }
     val cartoon = LocalCartoonStyle.current
 
     Surface(
@@ -94,6 +111,7 @@ private fun Place.kindLabel(): String? =
 private fun SearchSuggestionsPreview() {
     TripailTheme {
         SearchSuggestions(
+            notFound = false,
             suggestions = listOf(
                 Place(
                     displayName = "Warszawa",

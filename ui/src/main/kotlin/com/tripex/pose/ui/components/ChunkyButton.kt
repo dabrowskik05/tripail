@@ -54,7 +54,7 @@ fun ChunkyButton(
 @Composable
 private fun ChunkyButtonNormalPreview() {
     TripailTheme {
-        ChunkyButton(text = "Odkrywaj mapę", onClick = {})
+        ChunkyButton(text = "Explore the map", onClick = {})
     }
 }
 
@@ -62,6 +62,6 @@ private fun ChunkyButtonNormalPreview() {
 @Composable
 private fun ChunkyButtonDisabledPreview() {
     TripailTheme {
-        ChunkyButton(text = "Odkrywaj mapę", onClick = {}, enabled = false)
+        ChunkyButton(text = "Explore the map", onClick = {}, enabled = false)
     }
 }

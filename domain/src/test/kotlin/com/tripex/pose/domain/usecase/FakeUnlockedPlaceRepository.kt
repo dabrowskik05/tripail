@@ -14,11 +14,17 @@ internal class FakeUnlockedPlaceRepository : UnlockedPlaceRepository {
         return true
     }
 
+    /** Mirrors the DAO's `WHERE source = 'MANUAL'`: earned cities are not revocable. */
     override suspend fun lock(id: String): Boolean {
         val before = places.value.size
-        places.value = places.value.filterNot { it.id == id }
+        places.value = places.value.filterNot {
+            it.id == id && it.source == UnlockedPlaceRepository.Source.Manual
+        }
         return places.value.size != before
     }
+
+    override suspend fun find(id: String): UnlockedPlaceRepository.UnlockedPlace? =
+        places.value.firstOrNull { it.id == id }
 
     override fun observeAll(): Flow<List<UnlockedPlaceRepository.UnlockedPlace>> = places
 }

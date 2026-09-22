@@ -20,5 +20,18 @@ data class MapViewport(
                     ),
                 zoom = 12.0,
             )
+
+        /**
+         * Everything, seen from far away.
+         *
+         * The starting value before the camera has reported anything. It resolves to the coarse
+         * fog LOD, which is a cheap global query — the opposite of guessing a local viewport and
+         * asking for walking-resolution cells somewhere the player is not.
+         */
+        val WORLD: MapViewport =
+            MapViewport(
+                bounds = GeoBounds(north = 85.0, south = -85.0, east = 180.0, west = -180.0),
+                zoom = 2.0,
+            )
     }
 }
