@@ -8,7 +8,8 @@ Jetpack Compose, Clean Architecture, Room, MapLibre, Uber H3 and MapTiler.
 
 ## Download / Demo
 
-**APK available in this repository** (and in GitHub Releases when published).
+**[Download the APK](app/release/app-release.apk)** — also available in GitHub Releases
+when published.
 
 Requires Android 8.0+ (`armeabi-v7a` / `arm64-v8a`). No account. Grant location
 permission and the map starts clearing as you move.
@@ -28,25 +29,21 @@ the background.
 
 ---
 
-
-
 ## Features
 
 - **Fog of war** — one MapLibre fill layer over the world; unlocked areas are
-punched out as holes in a single GeoJSON source (never one layer per hexagon).
+  punched out as holes in a single GeoJSON source (never one layer per hexagon).
 - **Reveal by walking** — foreground service, ~1 km corridor along the route,
-gaps between GPS fixes bridged so a lost signal does not leave holes.
+  gaps between GPS fixes bridged so a lost signal does not leave holes.
 - **Search unlock** — MapTiler geocoding; pick a result, then confirm the reveal.
 - **Coverage stats** — percentages per continent, country and region from the
-same spatial index used for rendering.
+  same spatial index used for rendering.
 - **Polish / English** — UI, map labels and geocoder follow the same setting.
 - **Offline-first** — unlocks live in Room; routes are never uploaded.
 - **Battery-conscious tracking** — balanced power, ~10–15 s interval, 50 m
-minimum displacement.
+  minimum displacement.
 
 ---
-
-
 
 ## Architecture
 
@@ -68,48 +65,40 @@ Each screen is a ViewModel with immutable `State`, `Intent`s and one-shot
 
 ### Stack
 
-
-| Concern       | Choice                               |
-| ------------- | ------------------------------------ |
-| Language      | Kotlin, JDK 17                       |
-| UI            | Jetpack Compose + Material 3         |
-| Architecture  | Clean Architecture + MVI             |
-| DI            | Hilt                                 |
-| Async         | Coroutines + Flow                    |
-| Persistence   | Room + DataStore                     |
-| Maps          | MapLibre GL Android                  |
-| Spatial index | Uber H3                              |
-| Networking    | Retrofit + kotlinx.serialization     |
-| Geocoding     | MapTiler (Room-backed cache)         |
-| Boundaries    | Local PMTiles bundle                 |
-| Build         | Gradle Kotlin DSL + Version Catalogs |
-
+| Concern | Choice |
+|---|---|
+| Language | Kotlin, JDK 17 |
+| UI | Jetpack Compose + Material 3 |
+| Architecture | Clean Architecture + MVI |
+| DI | Hilt |
+| Async | Coroutines + Flow |
+| Persistence | Room + DataStore |
+| Maps | MapLibre GL Android |
+| Spatial index | Uber H3 |
+| Networking | Retrofit + kotlinx.serialization |
+| Geocoding | MapTiler (Room-backed cache) |
+| Boundaries | Local PMTiles bundle |
+| Build | Gradle Kotlin DSL + Version Catalogs |
 
 Google Maps / Mapbox SDKs were skipped on purpose: custom inverted fog needs an
 open GL stack, and Mapbox's licence rules it out for this project.
 
 ---
 
-
-
 ## How unlocks are stored
 
 H3 alone does not scale to whole regions. Ownership is stored two ways:
 
-
-| Scale | Trigger          | Stored as                          |
-| ----- | ---------------- | ---------------------------------- |
-| Micro | GPS fix (~1 km)  | `Set<Long>` of H3 indices (res 11) |
-| Macro | region / country | boundary feature id                |
-| Macro | searched place   | centre + radius                    |
-
+| Scale | Trigger | Stored as |
+|---|---|---|
+| Micro | GPS fix (~1 km) | `Set<Long>` of H3 indices (res 11) |
+| Macro | region / country | boundary feature id |
+| Macro | searched place | centre + radius |
 
 Both become holes in the same fog polygon. A Polish voivodeship at resolution 11
 is ~17M cells — storing the outline id instead avoids a guaranteed OOM.
 
 ---
-
-
 
 ## Background tracking
 
@@ -124,8 +113,6 @@ The app also asks for a battery-optimisation exemption — OEM killers are the
 usual reason tracking goes silent.
 
 ---
-
-
 
 ## Build
 
@@ -146,11 +133,9 @@ cd tripail
 JDK 17 required. API keys stay in `local.properties` → `BuildConfig`, never in
 git.
 
-More detail: `[docs/](docs)` — map provider, H3, GPS service, geocoding.
+More detail: [`docs/`](docs) — map provider, H3, GPS service, geocoding.
 
 ---
-
-
 
 ## Quality
 
@@ -161,8 +146,6 @@ More detail: `[docs/](docs)` — map provider, H3, GPS service, geocoding.
 Open issues: [TODO.md](TODO.md).
 
 ---
-
-
 
 ## Attribution
 
