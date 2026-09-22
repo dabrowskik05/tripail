@@ -3,6 +3,10 @@
 build/
 **/build/
 
+# AGP dumps next to a checked-in demo APK — keep app/release/*.apk, ignore the rest
+app/release/output-metadata.json
+app/release/baselineProfiles/
+
 # Local machine
 local.properties
 *.iml
@@ -13,9 +17,11 @@ local.properties
 captures/
 *.hprof
 
-# Keystores
+# Signing — never commit these
 *.jks
 *.keystore
+keystore.properties
+*.pepk
 
 # Native
 .cxx/
