@@ -1,5 +1,8 @@
 # 🗺️ Geocoding API Research (Faza 6)
 
+> **Production note (2026):** the app uses **MapTiler** geocoding. This document
+> remains as historical research on Nominatim (rate limits, User-Agent, query shape).
+
 ## 1. Wybór API dla Tripex Pose
 Celem fazy 6 jest wdrożenie paska wyszukiwania, który pozwoli na manualne "odkrywanie" miast (Geocoding) i generowanie odblokowanych stref (mgła wojny). Główne założenia to **brak kosztów** przy rozsądnym użyciu oraz łatwość integracji z aplikacją Android (Retrofit).
 

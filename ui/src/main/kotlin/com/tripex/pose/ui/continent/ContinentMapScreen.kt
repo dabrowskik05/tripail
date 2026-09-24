@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,9 +29,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -101,7 +104,7 @@ fun ContinentMapRoute(
         },
     )
 
-    /** Shared by the drag gesture and the slider; one value, two ways to move it. */
+    /** Written only by the slider; map touch is tap-only, so the canvas just reads it. */
     var panFraction by remember { mutableStateOf(WorldPan.CENTRE) }
 
     val dim by animateFloatAsState(
@@ -121,7 +124,6 @@ fun ContinentMapRoute(
             dimFraction = dim,
             onTap = { viewModel.onIntent(ContinentMapContract.Intent.ContinentClicked(it)) },
             panFraction = panFraction,
-            onPanFractionChange = { panFraction = it },
             modifier = Modifier.fillMaxSize(),
         )
 
@@ -205,7 +207,7 @@ private fun ContinentMenuPanel(
 
             // One axis, one control (V3.6.4). Zoom is fixed here, so dragging offered four
             // directions of freedom for a single degree of it — and showed no position.
-            Slider(
+            DragOnlySlider(
                 value = panFraction,
                 onValueChange = onPanFractionChange,
                 modifier = Modifier.semantics {
@@ -213,5 +215,39 @@ private fun ContinentMenuPanel(
                 },
             )
         }
+    }
+}
+
+/**
+ * A [Slider] that moves only by being dragged, relative to where the finger went down.
+ *
+ * The stock slider jumps its thumb to wherever the track is touched, which here throws the whole
+ * world sideways on a stray tap. A transparent layer on top takes every touch instead: a tap does
+ * nothing, and a drag started anywhere on the track shifts the value by the distance travelled.
+ * The slider underneath still draws the control and carries its accessibility semantics.
+ */
+@Composable
+private fun DragOnlySlider(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val currentValue by rememberUpdatedState(value)
+    val currentOnValueChange by rememberUpdatedState(onValueChange)
+
+    Box(modifier = modifier) {
+        Slider(value = value, onValueChange = onValueChange)
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .pointerInput(Unit) {
+                    detectHorizontalDragGestures { change, dragAmount ->
+                        val width = size.width.toFloat()
+                        if (width <= 0f) return@detectHorizontalDragGestures
+                        change.consume()
+                        currentOnValueChange((currentValue + dragAmount / width).coerceIn(0f, 1f))
+                    }
+                },
+        )
     }
 }

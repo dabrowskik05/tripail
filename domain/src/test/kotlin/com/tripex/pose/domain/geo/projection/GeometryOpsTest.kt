@@ -15,6 +15,49 @@ class GeometryOpsTest {
         0.0 to 0.0,
     )
 
+    private fun square(x: Double, y: Double, size: Double) = listOf(
+        x to y,
+        x + size to y,
+        x + size to y + size,
+        x to y + size,
+        x to y,
+    )
+
+    @Test
+    fun `separate pieces become separate polygons, whatever comes first`() {
+        val island = square(10.0, 10.0, 0.1)
+        val mainland = square(0.0, 0.0, 5.0)
+
+        val polygons = GeometryOps.polygonsOf(listOf(island, mainland))
+
+        assertEquals(2, polygons.size)
+        assertTrue(polygons.all { it.size == 1 })
+    }
+
+    @Test
+    fun `a ring inside another is its hole, and an island in that lake is land again`() {
+        val land = square(0.0, 0.0, 10.0)
+        val lake = square(2.0, 2.0, 6.0)
+        val islet = square(4.0, 4.0, 1.0)
+
+        val polygons = GeometryOps.polygonsOf(listOf(islet, lake, land))
+
+        assertEquals(2, polygons.size)
+        assertEquals(listOf(land, lake), polygons.first { it.first() == land })
+        assertEquals(listOf(islet), polygons.first { it.first() == islet })
+    }
+
+    @Test
+    fun `area counts every piece and subtracts holes`() {
+        val one = GeometryOps.areaKm2(listOf(square(0.0, 0.0, 1.0)))
+        val two = GeometryOps.areaKm2(listOf(square(0.0, 0.0, 1.0), square(0.0, 3.0, 1.0)))
+        val holed = GeometryOps.areaKm2(listOf(square(0.0, 0.0, 2.0), square(0.5, 0.5, 1.0)))
+
+        assertEquals(12_364.0, one, 200.0) // ~111 km × 111 km at the equator
+        assertTrue(two > one * 1.9)
+        assertEquals(one * 3, holed, one * 0.1)
+    }
+
     @Test
     fun `point inside ring`() {
         assertTrue(GeometryOps.pointInRing(unitSquare, 0.5, 0.5))

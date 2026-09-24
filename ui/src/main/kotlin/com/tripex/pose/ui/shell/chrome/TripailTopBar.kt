@@ -1,6 +1,8 @@
 package com.tripex.pose.ui.shell.chrome
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -32,6 +34,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.tripex.pose.ui.R
@@ -40,13 +43,16 @@ import com.tripex.pose.ui.theme.TripailTheme
 
 private val BarShape = CircleShape
 private val ProgressSize = 20.dp
+private val ActionSpacing = 12.dp
 
 /**
  * The one top bar, identical on every level of the map (V3.2.1).
  *
- * Left: back, then the name of the scope you are in. Right: search, settings, community. The
- * layout does not change between the world, a continent, a country or a region — a control that
- * moves between screens is a control the player has to find again each time.
+ * Back on the left, the name of the scope centred, search on the right. Settings and community
+ * moved out into [TripailSideActions] underneath: with five controls in one row a long name
+ * ("Ameryka Północna", even "Your world") was cut to an ellipsis. The layout does not change
+ * between the world, a continent, a country or a region — a control that moves between screens
+ * is a control the player has to find again each time.
  *
  * Search is a **mode** of this bar rather than a permanent field. It used to occupy the whole bar
  * on the map screen and did not exist anywhere else; now the magnifier opens it on any level and
@@ -62,15 +68,14 @@ internal fun TripailTopBar(
     onOpenSearch: () -> Unit,
     onQueryChange: (String) -> Unit,
     onSubmit: () -> Unit,
-    onSettingsClick: () -> Unit,
-    onCommunityClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val cartoon = LocalCartoonStyle.current
 
+    // One gap for every neighbour pair, in every language.
     Row(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(ActionSpacing),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // Always first, always the same shape: back is where the thumb already expects it,
@@ -92,33 +97,56 @@ internal fun TripailTopBar(
                 modifier = Modifier.weight(1f),
             )
         } else {
-            if (title.isNotBlank()) {
-                Surface(shape = BarShape, color = cartoon.paperBg, shadowElevation = 4.dp) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleLarge,
-                        color = cartoon.inkPrimary,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                    )
+            // One button on each side, so the space between them is centred on the screen and
+            // the title in it is too. It still gives way with an ellipsis rather than squeeze the
+            // buttons.
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                if (title.isNotBlank()) {
+                    Surface(shape = BarShape, color = cartoon.paperBg, shadowElevation = 4.dp) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleLarge,
+                            color = cartoon.inkPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                        )
+                    }
                 }
             }
-            androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
             BarAction(
                 icon = Icons.Filled.Search,
                 description = stringResource(R.string.search_open_cd),
                 onClick = onOpenSearch,
             )
-            BarAction(
-                icon = Icons.Filled.Settings,
-                description = stringResource(R.string.map_settings_cd),
-                onClick = onSettingsClick,
-            )
-            BarAction(
-                icon = Icons.Filled.Person,
-                description = stringResource(R.string.map_community_cd),
-                onClick = onCommunityClick,
-            )
         }
+    }
+}
+
+/**
+ * Settings and community, stacked under the magnifier at the right edge.
+ *
+ * Deliberately at the top: the bottom of the screen changes from level to level — the continent
+ * slider and its "Choose" button, the stats panel, the place sheet, the map attribution — and
+ * buttons parked there would either jump with each panel or sit on top of one.
+ */
+@Composable
+internal fun TripailSideActions(
+    onSettingsClick: () -> Unit,
+    onCommunityClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(ActionSpacing)) {
+        BarAction(
+            icon = Icons.Filled.Settings,
+            description = stringResource(R.string.map_settings_cd),
+            onClick = onSettingsClick,
+        )
+        BarAction(
+            icon = Icons.Filled.Person,
+            description = stringResource(R.string.map_community_cd),
+            onClick = onCommunityClick,
+        )
     }
 }
 
@@ -195,8 +223,6 @@ private fun TripailTopBarBrowsePreview() {
             onOpenSearch = {},
             onQueryChange = {},
             onSubmit = {},
-            onSettingsClick = {},
-            onCommunityClick = {},
             modifier = Modifier.padding(16.dp),
         )
     }

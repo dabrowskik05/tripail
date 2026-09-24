@@ -3,7 +3,6 @@ package com.tripex.pose.data.repository
 import com.tripex.pose.data.local.UnlockedHexDao
 import com.tripex.pose.data.local.UnlockedHexEntity
 import com.tripex.pose.domain.geo.FogGeometry
-import com.tripex.pose.domain.geo.GeoBounds
 import com.tripex.pose.domain.geo.H3Config
 import com.tripex.pose.domain.geo.H3Converter
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -54,8 +53,7 @@ class UnlockedAreaRepositoryImplTest {
                 }
             }
 
-        override fun observeDetailed(viewportCells: Set<Long>): Flow<List<Long>> = flowOf(emptyList())
-        override fun observeMid(viewportCells: Set<Long>): Flow<List<Long>> = flowOf(emptyList())
+        override fun observeTrail(): Flow<List<Long>> = flowOf(emptyList())
         override fun observeFar(): Flow<List<Long>> = flowOf(emptyList())
         override fun observeCount(): Flow<Int> = count
     }
@@ -77,7 +75,6 @@ class UnlockedAreaRepositoryImplTest {
         override fun parentOf(cell: Long, resolution: Int): Long = cell / 10
         override fun gridDistance(from: Long, to: Long): Int = 0
         override fun outline(cells: Collection<Long>): FogGeometry = FogGeometry.EMPTY
-        override fun cellsForBounds(bounds: GeoBounds, resolution: Int): Set<Long> = emptySet()
         override fun toDebugString(cell: Long): String = cell.toString()
     }
 }

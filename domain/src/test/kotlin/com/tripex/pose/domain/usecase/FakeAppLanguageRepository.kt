@@ -14,6 +14,8 @@ internal class FakeAppLanguageRepository(
 
     override suspend fun selected(): AppLanguage = current.value
 
+    override fun observeSelected(): Flow<AppLanguage?> = current
+
     override fun observe(): Flow<AppLanguage> = current
 
     override suspend fun set(language: AppLanguage) {

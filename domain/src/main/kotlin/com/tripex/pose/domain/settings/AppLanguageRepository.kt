@@ -14,6 +14,9 @@ interface AppLanguageRepository {
     /** `null` until the player has picked — see the language screen (V3.5.2). */
     suspend fun selected(): AppLanguage?
 
+    /** [selected] as a stream, so "has the player picked yet" updates the moment they do. */
+    fun observeSelected(): Flow<AppLanguage?>
+
     /** Falls back to [AppLanguage.DEFAULT] so callers that only need *a* language stay simple. */
     fun observe(): Flow<AppLanguage>
 

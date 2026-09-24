@@ -1,6 +1,7 @@
 package com.tripex.pose.data.repository
 
 import com.tripex.pose.core.di.IoDispatcher
+import com.tripex.pose.core.logging.Logger
 import com.tripex.pose.data.BuildConfig
 import com.tripex.pose.data.local.GeocodeCacheDao
 import com.tripex.pose.data.local.GeocodeCacheEntity
@@ -47,6 +48,7 @@ internal class MapTilerGeocodingRepository
         private val json: Json,
         private val appLanguage: AppLanguageRepository,
         @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+        private val logger: Logger,
     ) : GeocodingRepository {
 
         override suspend fun suggest(query: String): Result<List<Place>> =
@@ -69,7 +71,7 @@ internal class MapTilerGeocodingRepository
                         .deduplicated()
                         // An empty answer is not an answer worth remembering for a month.
                         .also { if (it.isNotEmpty()) writeCache(key, it) }
-                }
+                }.onFailure { logger.w(TAG, "Suggestions for \"$query\" failed: ${it.message}") }
             }
 
         override suspend fun reverseGeocode(lat: Double, lng: Double): Result<Place?> =
@@ -77,15 +79,25 @@ internal class MapTilerGeocodingRepository
                 runCatching {
                     val apiKey = BuildConfig.MAPTILER_API_KEY.trim()
                     check(apiKey.isNotEmpty()) { "MAPTILER_API_KEY missing from local.properties" }
-                    api.reverse(lng = lng, lat = lat, key = apiKey, language = language())
-
-                        .features
-                        .firstNotNullOfOrNull { it.toPlace() }
+                    val language = language()
+                    // The same object a search for the city returns, so an automatic unlock and a
+                    // manual one share an id and a bounding box — and therefore a radius. Asking
+                    // for every type at once returned the smallest hit instead ("Place de l'Ile"
+                    // in Geneva, a park in Mokotów) with a point-sized box and a minimum circle.
+                    REVERSE_TYPES.firstNotNullOfOrNull { type ->
+                        api.reverse(lng = lng, lat = lat, key = apiKey, language = language, type = type)
+                            .features
+                            .firstNotNullOfOrNull { it.toPlace() }
+                    }
                 }
             }
 
+        /**
+         * Versioned: entries written before [Place.countryCode] existed cannot find island
+         * countries, and would otherwise be served for another month.
+         */
         private fun cacheKey(query: String, language: String): String =
-            "$language|" + query.trim().lowercase()
+            "$CACHE_VERSION|$language|" + query.trim().lowercase()
 
         /**
          * Follows the **app's** language, not the device's.
@@ -156,6 +168,7 @@ internal class MapTilerGeocodingRepository
             val kind: String,
             val id: String,
             val context: List<String>,
+            val countryCode: String? = null,
         ) {
             fun toPlace(): Place = Place(
                 displayName = displayName,
@@ -170,6 +183,7 @@ internal class MapTilerGeocodingRepository
                     .getOrDefault(com.tripex.pose.domain.geo.PlaceKind.Unknown),
                 id = id,
                 context = context,
+                countryCode = countryCode,
             )
 
             companion object {
@@ -184,12 +198,18 @@ internal class MapTilerGeocodingRepository
                     kind = place.kind.name,
                     id = place.id,
                     context = place.context,
+                    countryCode = place.countryCode,
                 )
             }
         }
 
         private companion object {
             const val MIN_QUERY_LENGTH = 2
+            const val CACHE_VERSION = "v2"
+            const val TAG = "Geocoding"
+
+            /** Coarse to fine, in the order a forward search ranks a city's own record. */
+            val REVERSE_TYPES = listOf("municipal_district", "municipality", "place")
 
             /** Roughly 5 km at mid latitudes — same place, different granularity. */
             const val DUPLICATE_DEGREES = 0.05

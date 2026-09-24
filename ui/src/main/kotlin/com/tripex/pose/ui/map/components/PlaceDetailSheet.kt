@@ -10,7 +10,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -35,7 +34,8 @@ private const val SECONDARY_ALPHA = 0.7f
  *
  * One panel, two entry points: a search result and a tap on a city open exactly this. The rule
  * for the buttons is that there is never a choice between revealing and covering — a place is
- * one or the other, so it offers one action and a way out.
+ * one or the other, so it offers one action. There is no close button: picking something else
+ * replaces the sheet, and system back dismisses it.
  *
  * "Cover" is absent for ground that was earned rather than chosen (a city unlocked by standing
  * in it) and for countries, which are entered rather than owned.
@@ -46,7 +46,6 @@ internal fun PlaceDetailSheet(
     isApplying: Boolean,
     onReveal: () -> Unit,
     onCover: () -> Unit,
-    onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val cartoon = LocalCartoonStyle.current
@@ -118,9 +117,6 @@ internal fun PlaceDetailSheet(
                     )
                 }
 
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.place_dismiss))
-                }
             }
         }
     }
@@ -148,7 +144,6 @@ private fun PlaceDetailSheetPreview() {
             isApplying = false,
             onReveal = {},
             onCover = {},
-            onDismiss = {},
         )
     }
 }

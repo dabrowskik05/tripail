@@ -28,11 +28,13 @@ internal fun MapTilerFeatureDto.toPlace(): Place? {
         kind = placeKind(),
         id = id ?: "$name@${center[0]},${center[1]}",
         context = context.mapNotNull { it.text }.filter { it.isNotBlank() },
+        countryCode = properties?.countryCode?.takeIf { it.isNotBlank() }?.uppercase(),
     )
 }
 
 private fun MapTilerFeatureDto.placeKind(): PlaceKind {
-    val types = (placeType + properties?.placeTypeName.orEmpty() + listOfNotNull(properties?.kind))
+    val types = (placeType + properties?.placeTypeName.orEmpty() + listOf(properties?.kind))
+        .filterNotNull()
         .map { it.lowercase() }
     return when {
         types.any { it.contains("country") } -> PlaceKind.Country

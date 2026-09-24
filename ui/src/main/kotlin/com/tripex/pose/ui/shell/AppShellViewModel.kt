@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
@@ -26,7 +27,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 
 /**
  * Startup gate (M2.2). Emits [Readiness] derived from real signals only — there is no timer and
@@ -46,12 +46,13 @@ class AppShellViewModel @Inject constructor(
 
     private val attempt = MutableStateFlow(0)
 
-    /** Read once: the answer only changes when the player picks, and then they are past it. */
-    private val needsLanguage = MutableStateFlow(false)
-
-    init {
-        viewModelScope.launch { needsLanguage.value = appLanguage.selected() == null }
-    }
+    /**
+     * Observed rather than read once: this view model outlives the picker, so a one-off read kept
+     * saying "not chosen" and sent the player back to the picker after returning to the splash.
+     */
+    private val needsLanguage: Flow<Boolean> = appLanguage.observeSelected()
+        .map { it == null }
+        .distinctUntilChanged()
 
     val state: StateFlow<AppShellContract.State> = attempt
         .flatMapLatest { readiness() }

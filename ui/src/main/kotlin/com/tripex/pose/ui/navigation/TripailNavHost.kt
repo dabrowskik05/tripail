@@ -11,7 +11,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -73,7 +75,7 @@ fun TripailNavHost(
         popEnterTransition = { EnterTransition.None },
         popExitTransition = { fadeOut(tween(EXIT_MILLIS)) },
     ) {
-        composable<Loading> {
+        composable<Loading> { entry ->
             // The splash has no chrome. Hidden in an effect rather than inline: composition can
             // run many times and must stay free of side effects, or the bar would be torn down
             // on every recomposition of the screen underneath it.
@@ -86,21 +88,31 @@ fun TripailNavHost(
                 // First launch picks a language before the world appears (V3.5.2); afterwards
                 // this is a straight line from the splash into the map.
                 onEnterRequested = {
-                    navController.navigate(if (shellState.needsLanguage) Language else World)
+                    if (entry.isResumed()) {
+                        navController.navigate(if (shellState.needsLanguage) Language else World)
+                    }
                 },
                 onRetry = { shellViewModel.onIntent(AppShellContract.Intent.Retry) },
             )
         }
 
-        composable<World> {
+        // The menu fades out over the map on the way in and back in over it on the way out.
+        // With no exit transition it stayed opaque until the map had finished fading in
+        // underneath, then vanished in one frame — the cut the transition was meant to remove.
+        composable<World>(
+            exitTransition = { fadeOut(tween(ENTER_MILLIS)) },
+            popEnterTransition = { fadeIn(tween(ENTER_MILLIS)) },
+        ) { entry ->
             ContinentMapRoute(
                 chrome = chrome,
                 onBack = { navController.popBackStack() },
                 onOpenContinent = { continentId, bounds ->
                     // The camera is placed, never flown, and the continent fills the screen from
                     // the first frame (V3.3.5).
-                    mapHost.flyTo(bounds, animate = false, fill = true)
-                    navController.navigate(Continent(continentId = continentId.name))
+                    if (entry.isResumed()) {
+                        mapHost.flyTo(bounds, animate = false, fill = true)
+                        navController.navigate(Continent(continentId = continentId.name))
+                    }
                 },
             )
         }
@@ -111,7 +123,7 @@ fun TripailNavHost(
                 host = mapHost,
                 chrome = chrome,
                 onOpenCountry = { iso2, bounds ->
-                    navController.navigate(countryRoute(iso2, bounds, continentId))
+                    if (entry.isResumed()) navController.navigate(countryRoute(iso2, bounds, continentId))
                 },
                 onBack = { navController.popBackStack() },
             )
@@ -123,21 +135,33 @@ fun TripailNavHost(
                 host = mapHost,
                 chrome = chrome,
                 onOpenMap = { area, bounds, label ->
-                    navController.navigate(mapViewRoute(area, bounds, label))
+                    if (entry.isResumed()) navController.navigate(mapViewRoute(area, bounds, label))
                 },
                 onOpenRegion = { regionId, countryIso2, bounds ->
-                    navController.navigate(regionRoute(regionId, countryIso2, bounds, continentId))
+                    if (entry.isResumed()) {
+                        navController.navigate(regionRoute(regionId, countryIso2, bounds, continentId))
+                    }
                 },
                 onBack = { navController.popBackStack() },
             )
         }
 
-        composable<Region> {
+        composable<Region> { entry ->
+            val continentId = entry.toRoute<Region>().continentId
             RegionRoute(
                 host = mapHost,
                 chrome = chrome,
                 onOpenMap = { area, bounds, label ->
-                    navController.navigate(mapViewRoute(area, bounds, label))
+                    if (entry.isResumed()) navController.navigate(mapViewRoute(area, bounds, label))
+                },
+                // Replaces the country level rather than stacking on it, so back from the new
+                // country goes to the continent — not into the old country's regions.
+                onOpenCountry = { iso2, bounds ->
+                    if (entry.isResumed()) {
+                        navController.navigate(countryRoute(iso2, bounds, continentId)) {
+                            popUpTo<Country> { inclusive = true }
+                        }
+                    }
                 },
                 onBack = { navController.popBackStack() },
             )
@@ -167,3 +191,14 @@ fun TripailNavHost(
         }
     }
 }
+
+/**
+ * Whether [this] destination is the one fully on screen.
+ *
+ * A second tap on the same continent, country or region used to push a second copy of the next
+ * level, because the first navigation was still mid-transition. A screen that is not resumed —
+ * already leaving, or not yet arrived — no longer navigates at all, so a repeated tap is a no-op.
+ */
+private fun NavBackStackEntry.isResumed(): Boolean =
+    lifecycle.currentState == Lifecycle.State.RESUMED
+

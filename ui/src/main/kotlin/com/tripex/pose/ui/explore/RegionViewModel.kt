@@ -77,7 +77,7 @@ class RegionViewModel @Inject constructor(
 
     fun onIntent(intent: RegionContract.Intent) {
         when (intent) {
-            is RegionContract.Intent.RegionTapped -> selectRegion(intent.tap)
+            is RegionContract.Intent.RegionTapped -> onTap(intent.tap)
             RegionContract.Intent.ToggleRegionUnlock -> claimRegion()
             RegionContract.Intent.ExploreRequested -> {
                 val current = _state.value
@@ -127,6 +127,34 @@ class RegionViewModel @Inject constructor(
         viewModelScope.launch {
             val owned = unlockedRegions.isUnlocked(AdminLevel.Adm1, regionId)
             _state.update { if (it.regionId == regionId) it.copy(isUnlocked = owned) else it }
+        }
+    }
+
+    /**
+     * Only a region of **this** country is a region pick. Anything else — the neighbouring country
+     * under the finger — used to land in [selectRegion] too: "CZ" became the selected region id
+     * while the scene kept drawing Poland's regions, which is how Poland's outlines showed up
+     * "in Czechia". Another country now opens that country's level instead.
+     */
+    private fun onTap(tap: BoundaryTap) {
+        val country = _state.value.countryIso2
+        when {
+            tap.level == AdminLevel.Adm1 && tap.countryIso2.equals(country, ignoreCase = true) ->
+                selectRegion(tap)
+            else -> {
+                val iso2 = if (tap.level == AdminLevel.Adm0) tap.featureId else tap.countryIso2
+                if (iso2 != null && !iso2.equals(country, ignoreCase = true)) openCountry(iso2)
+            }
+        }
+    }
+
+    private fun openCountry(iso2: String) {
+        viewModelScope.launch {
+            val bounds = boundaries.rings(AdminLevel.Adm0, iso2).getOrNull()
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { GeometryOps.mainlandBounds(it) }
+                ?: return@launch
+            _effects.send(RegionContract.Effect.OpenCountry(iso2, bounds))
         }
     }
 

@@ -28,5 +28,8 @@ object RegionContract {
 
     sealed interface Effect {
         data class OpenMap(val area: AreaKey, val bounds: GeoBounds, val label: String) : Effect
+
+        /** A tap on another country: leave the region level for that country's. */
+        data class OpenCountry(val iso2: String, val bounds: GeoBounds) : Effect
     }
 }

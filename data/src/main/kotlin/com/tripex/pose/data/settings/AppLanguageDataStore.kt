@@ -54,6 +54,11 @@ internal class AppLanguageDataStore
                     ?.let(AppLanguage::fromTag)
             }
 
+        override fun observeSelected(): Flow<AppLanguage?> =
+            dataStore.data
+                .catch { emit(emptyPreferences()) }
+                .map { prefs -> prefs[LANGUAGE]?.let(AppLanguage::fromTag) }
+
         override fun observe(): Flow<AppLanguage> =
             dataStore.data
                 .catch { emit(emptyPreferences()) }

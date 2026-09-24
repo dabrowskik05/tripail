@@ -1,10 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="tracking_open_settings">Ustawienia aplikacji</string>
-    <string name="tracking_status_idle">Gotowy do odkrywania</string>
-    <string name="tracking_status_active">Odkrywanie w toku</string>
-    <string name="tracking_status_permission">Brak uprawnień lokalizacji</string>
-    <string name="tracking_status_gps_off">GPS wyłączony</string>
     <string name="status_precise_location_required">Wymagana dokładna lokalizacja — włącz Precise w ustawieniach aplikacji.</string>
     <string name="status_permission_missing">Brak uprawnień do lokalizacji.</string>
     <string name="status_location_disabled">Lokalizacja jest wyłączona w systemie.</string>
@@ -20,7 +16,8 @@
     <string name="search_placeholder">np. Warszawa</string>
     <string name="search_not_found">Nie znaleziono miejsca</string>
     <string name="search_attribution">Wyszukiwanie © MapTiler © OpenStreetMap</string>
-    <string name="loading_enter">Wejdź</string>
+    <string name="logo_content_description">Tripail</string>
+    <string name="loading_enter">Enter</string>
     <string name="loading_preparing">Przygotowuję Twój świat…</string>
     <string name="loading_failed">Nie udało się przygotować danych.</string>
     <string name="loading_failed_atlas">Przegląd świata będzie niedostępny, ale mapa zadziała.</string>
@@ -37,7 +34,6 @@
     <string name="place_kind_village">Wieś</string>
     <string name="place_kind_address">Adres</string>
     <string name="place_kind_poi">Miejsce</string>
-    <string name="place_dismiss">Zamknij</string>
     <string name="place_reveal">Odkryj</string>
     <string name="place_cover">Zakryj</string>
     <string name="place_working">Chwileczkę…</string>
@@ -58,16 +54,14 @@
     <string name="continent_asia">Azja</string>
     <string name="continent_oceania">Australia i Oceania</string>
     <string name="continent_antarctica">Antarktyda</string>
-    <string name="area_back">Wstecz</string>
     <string name="continent_select">Wybierz</string>
     <string name="continent_pan_cd">Przesuń świat na wschód lub zachód</string>
     <string name="area_coverage">Odkryte: %1$d%%</string>
-    <string name="area_region_unlock">Odkryj cały region</string>
+    <string name="area_region_unlock">Odkryj</string>
     <string name="area_region_unlocking">Odkrywam…</string>
     <string name="area_region_cover">Zakryj region</string>
-    <string name="area_pick_region">Dotknij regionu, by zobaczyć jego postęp</string>
-    <string name="area_boundaries_unavailable">Mapa granic jest jeszcze przygotowywana</string>
     <string name="area_back_cd">Wróć o poziom wyżej</string>
     <string name="area_pick_country">Dotknij kraju, by zobaczyć jego postęp</string>
     <string name="area_country_unknown">Tutaj nie ma kraju do wybrania</string>
+    <string name="map_maptiler_logo_cd">Logo MapTiler — otwiera maptiler.com</string>
 </resources>

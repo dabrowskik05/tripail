@@ -35,7 +35,6 @@ object MapContract {
         val hasFineLocation: Boolean = false,
         val needsPreciseLocationHint: Boolean = false,
         val statusMessage: StatusMessage? = null,
-        val communityVisible: Boolean = false,
         val backgroundPrompt: BackgroundPrompt? = null,
     )
 
@@ -52,8 +51,6 @@ object MapContract {
         ) : Intent
 
         data object OpenSettingsRequested : Intent
-        data object OpenCommunity : Intent
-        data object CloseCommunity : Intent
 
         /** The player accepted whatever [BackgroundPrompt] is currently on screen. */
         data object BackgroundPromptConfirmed : Intent

@@ -12,10 +12,10 @@ interface UnlockedAreaRepository {
      */
     suspend fun unlock(hexes: Set<Long>): Int
 
-    fun observeDetailed(viewportCells: Set<Long>): Flow<List<Long>>
+    /** Every unlocked cell lifted to [com.tripex.pose.domain.geo.H3Config.TRAIL_RESOLUTION]. */
+    fun observeTrail(): Flow<List<Long>>
 
-    fun observeMid(viewportCells: Set<Long>): Flow<List<Long>>
-
+    /** Every unlocked cell lifted to [com.tripex.pose.domain.geo.H3Config.COARSE_RESOLUTION]. */
     fun observeFar(): Flow<List<Long>>
 
     fun observeCount(): Flow<Int>

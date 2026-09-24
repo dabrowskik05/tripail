@@ -8,8 +8,7 @@ Jetpack Compose, Clean Architecture, Room, MapLibre, Uber H3 and MapTiler.
 
 ## Download / Demo
 
-**[Download the APK](app/release/app-release.apk)** — also available in GitHub Releases
-when published.
+APK available in the [releases section](https://github.com/dabrowskik05/tripail/releases/latest).
 
 Requires Android 8.0+ (`armeabi-v7a` / `arm64-v8a`). No account. Grant location
 permission and the map starts clearing as you move.

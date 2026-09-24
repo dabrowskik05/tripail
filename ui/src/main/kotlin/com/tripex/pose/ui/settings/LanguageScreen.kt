@@ -35,10 +35,7 @@ fun LanguageRoute(
     viewModel: LanguageViewModel = hiltViewModel(),
 ) {
     LanguageScreen(
-        onPick = { language ->
-            viewModel.select(language)
-            onPicked()
-        },
+        onPick = { language -> viewModel.select(language, onSaved = onPicked) },
     )
 }
 

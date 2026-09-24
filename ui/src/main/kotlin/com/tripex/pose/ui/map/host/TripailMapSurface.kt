@@ -1,9 +1,11 @@
 package com.tripex.pose.ui.map.host
 
 import android.content.ComponentCallbacks
+import android.content.Context
 import android.content.res.Configuration
 import android.graphics.RectF
 import android.os.Bundle
+import android.view.View
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -20,16 +22,18 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.savedstate.compose.LocalSavedStateRegistryOwner
 import com.tripex.pose.domain.geo.ContinentId
 import com.tripex.pose.domain.geo.GeoBounds
-import com.tripex.pose.domain.geo.MapViewport
 import com.tripex.pose.domain.geo.atlas.AdminLevel
 import com.tripex.pose.domain.settings.AppLanguage
 import com.tripex.pose.domain.geo.atlas.BoundaryFields
+import com.tripex.pose.ui.R
 import com.tripex.pose.ui.continent.ContinentPalette
 import com.tripex.pose.ui.explore.BoundaryTap
 import com.tripex.pose.ui.map.PlaceTap
@@ -41,10 +45,12 @@ import kotlin.math.roundToInt
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.maps.MapLibreMapOptions
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.BackgroundLayer
+import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.FillLayer
 import org.maplibre.android.style.layers.Layer
 import org.maplibre.android.style.layers.LineLayer
@@ -62,6 +68,13 @@ private const val FOG_SOURCE_ID = "reveal-source"
 /** MapTiler's settlement layer. Stable across style versions, unlike the layer ids. */
 private const val PLACE_SOURCE_LAYER = "place"
 
+private const val PLAYER_SOURCE_ID = "player"
+private const val PLAYER_HALO = "player-halo"
+private const val PLAYER_PIN = "player-pin"
+private const val PLAYER_ICON = "player-marker"
+private const val PLAYER_HALO_RADIUS = 16f
+private const val PLAYER_HALO_OPACITY = 0.25f
+private const val EMPTY_FEATURES = """{"type":"FeatureCollection","features":[]}"""
 private const val FOG_FILL = "reveal-wash"
 private const val FOG_EDGE = "reveal-edge"
 private const val BACKGROUND_LAYER = "background"
@@ -73,6 +86,26 @@ private const val ADM1_FILL_HIT = "adm1-fill-hit"
 private const val ADM1_FILL_SELECTED = "adm1-fill-selected"
 private const val ADM1_LINE = "adm1-line"
 private const val ADM1_LINE_SELECTED = "adm1-line-selected"
+private const val ADM0_LIFT_SHADOW = "adm0-lift-shadow"
+private const val ADM0_LIFT_LINE_SHADOW = "adm0-lift-line-shadow"
+private const val ADM1_LIFT_SHADOW = "adm1-lift-shadow"
+private const val ADM1_LIFT_LINE_SHADOW = "adm1-lift-line-shadow"
+
+/*
+ * The "lifted" look, only on what was tapped: the picked country, or the picked region together
+ * with its country. MapLibre has no real shadow, so each is a dark copy of the shape pushed
+ * down-right — a hard one under the area and a soft, blurred one under its outline. Offsets are in
+ * screen pixels, so the effect is the same at every zoom. Every other border stays flat.
+ */
+private val SHADOW_COLOR = android.graphics.Color.BLACK
+private val LIFT_SHADOW_OFFSET = arrayOf(4f, 5f)
+private const val LIFT_SHADOW_OPACITY = 0.35f
+private val LIFT_LINE_SHADOW_OFFSET = arrayOf(1.5f, 2f)
+private const val LIFT_LINE_SHADOW_WIDTH = 2.5f
+private const val LIFT_LINE_SHADOW_BLUR = 2.5f
+private const val LIFT_LINE_SHADOW_OPACITY = 0.3f
+/** The rest of a picked region's country, darkened; opaque enough for the shade to register. */
+private const val REST_OF_COUNTRY_OPACITY = 0.45f
 
 /** No real feature id equals this, so it is a filter that matches nothing. */
 private const val NO_SELECTION = "\u0000none"
@@ -96,8 +129,8 @@ private const val AREA_FILL_OPACITY = 0.22f
  */
 private const val DIMMED_FILL_OPACITY = 0.5f
 
-/** Only the picked area gets a brighter wash. */
-private const val SELECTED_FILL_OPACITY = 0.35f
+/** The picked area: opaque enough that its lighter shade of the continent colour reads clearly. */
+private const val SELECTED_FILL_OPACITY = 0.75f
 
 private const val LINE_OPACITY = 0.85f
 private const val SELECTED_LINE_OPACITY = 1f
@@ -153,6 +186,9 @@ internal fun TripailMapSurface(
     onPlaceTap: (PlaceTap) -> Unit,
     language: AppLanguage,
     modifier: Modifier = Modifier,
+    visible: Boolean = true,
+    /** `(latitude, longitude)` of the player, or `null` when unknown — then no marker. */
+    playerLocation: Pair<Double, Double>? = null,
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -164,14 +200,17 @@ internal fun TripailMapSurface(
     val mapView = remember {
         val restored = savedStateRegistryOwner.savedStateRegistry
             .consumeRestoredStateForKey(MAP_VIEW_STATE_KEY)
-        MapView(context).also { it.onCreate(restored) }
+        // TextureView rather than the default SurfaceView: a SurfaceView ignores alpha, so the
+        // map could only be cut in and out, never faded, between the menu and the map levels.
+        val options = MapLibreMapOptions.createFromAttributes(context).textureMode(true)
+        MapView(context, options).also { it.onCreate(restored) }
     }
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
     var style by remember { mutableStateOf<Style?>(null) }
 
     val currentOnTap by rememberUpdatedState(onFeatureTap)
     val currentOnPlaceTap by rememberUpdatedState(onPlaceTap)
-    val currentScene by rememberUpdatedState(host.scene)
+    val currentScene by rememberUpdatedState(host.renderedScene)
 
     val oceanArgb = cartoon.oceanBlue.toArgb()
     DisposableEffect(lifecycleOwner, mapView) {
@@ -211,6 +250,9 @@ internal fun TripailMapSurface(
     AndroidView(
         factory = { mapView },
         modifier = modifier.onSizeChanged { surfaceSize = it },
+        // Hidden, not removed: an invisible view takes no touches and draws nothing, while the
+        // one MapLibre instance and its loaded style survive for the next time it is shown.
+        update = { it.visibility = if (visible) View.VISIBLE else View.INVISIBLE },
     )
 
     // Built once. Nothing below this point ever rebuilds the style or the layers.
@@ -221,8 +263,10 @@ internal fun TripailMapSurface(
             libreMap.uiSettings.apply {
                 isRotateGesturesEnabled = false
                 isTiltGesturesEnabled = false
-                isAttributionEnabled = true
-                isLogoEnabled = true
+                // Drawn by the app instead (`MapAttribution`): MapLibre's logo is not required,
+                // and the "i" button hid the text the data licences require to be visible.
+                isAttributionEnabled = false
+                isLogoEnabled = false
             }
             libreMap.setMinZoomPreference(MIN_ZOOM)
             libreMap.setMaxZoomPreference(MAX_ZOOM)
@@ -238,6 +282,7 @@ internal fun TripailMapSurface(
                 addFogLayers(loaded, reveal.washColorArgb, reveal.edgeColorArgb, reveal.washOpacity)
                 loaded.addSource(VectorSource(BOUNDARY_SOURCE_ID, boundarySourceUri))
                 addBoundaryLayers(loaded, reveal.washColorArgb)
+                addPlayerLayers(loaded, context, cartoon.buttonPrimary.toArgb())
                 BoundarySurfaceMetrics.onLayersBuilt()
                 style = loaded
             }
@@ -257,11 +302,20 @@ internal fun TripailMapSurface(
         loaded.getSourceAs<GeoJsonSource>(FOG_SOURCE_ID)?.setGeoJson(host.fogGeoJson)
     }
 
-    // A scene change is filters and visibility. It never touches the camera.
-    LaunchedEffect(style, host.scene) {
+    // The player's own position — the one thing on the map that is about them right now.
+    LaunchedEffect(style, playerLocation) {
         val loaded = style ?: return@LaunchedEffect
-        applyScene(loaded, host.scene)
-        applyContinentTint(loaded, host.scene.continentId)
+        val json = playerLocation?.let { (lat, lng) ->
+            Feature.fromGeometry(org.maplibre.geojson.Point.fromLngLat(lng, lat)).toJson()
+        } ?: EMPTY_FEATURES
+        loaded.getSourceAs<GeoJsonSource>(PLAYER_SOURCE_ID)?.setGeoJson(json)
+    }
+
+    // A scene change is filters and visibility. It never touches the camera.
+    LaunchedEffect(style, host.renderedScene) {
+        val loaded = style ?: return@LaunchedEffect
+        applyScene(loaded, host.renderedScene)
+        applyContinentTint(loaded, host.renderedScene)
         BoundarySurfaceMetrics.onFiltersApplied()
     }
 
@@ -281,30 +335,10 @@ internal fun TripailMapSurface(
         host.onCameraApplied(request.token)
     }
 
-    /**
-     * Reports where the camera settled, so the wash can pick its resolution (`FogLod`).
-     *
-     * Idle, not every frame: the listener fires once the gesture stops, and the flow downstream
-     * is debounced on top of that. Reporting continuously would re-query Room mid-pan.
-     */
-    DisposableEffect(map) {
-        val libreMap = map ?: return@DisposableEffect onDispose { }
-        val listener = MapLibreMap.OnCameraIdleListener {
-            val region = libreMap.projection.visibleRegion.latLngBounds
-            host.onViewportChanged(
-                MapViewport(
-                    bounds = GeoBounds(
-                        north = region.latitudeNorth,
-                        south = region.latitudeSouth,
-                        east = region.longitudeEast,
-                        west = region.longitudeWest,
-                    ),
-                    zoom = libreMap.cameraPosition.zoom,
-                ),
-            )
-        }
-        libreMap.addOnCameraIdleListener(listener)
-        onDispose { libreMap.removeOnCameraIdleListener(listener) }
+    // Ready = styled and placed. Until then the map is a blank or misplaced surface, and the
+    // shell keeps it faded out and the panels back rather than show that.
+    LaunchedEffect(style, host.cameraRequest) {
+        if (style != null && host.cameraRequest == null) host.markReady()
     }
 
     // Keeps the camera on the continent being explored (V3.3.7). Null means the whole world.
@@ -334,7 +368,11 @@ internal fun TripailMapSurface(
 
             // Settlements win over the area they sit in: a label is a smaller, more deliberate
             // target than the country behind it (V3.3.4).
-            val place = libreMap.placeAt(box)
+            // Only settlements on the continent being explored: its countries are the only ones
+            // rendered in the hit layer, so no country under the finger means another continent.
+            val place = libreMap.placeAt(box)?.takeIf {
+                currentScene.continentId == null || libreMap.countryAt(box) != null
+            }
             if (place != null) {
                 currentOnPlaceTap(place)
                 return@OnMapClickListener true
@@ -346,6 +384,33 @@ internal fun TripailMapSurface(
         libreMap.addOnMapClickListener(listener)
         onDispose { libreMap.removeOnMapClickListener(listener) }
     }
+}
+
+/**
+ * Marker layers on top of everything: a soft halo and the pin. Nothing else may draw over the
+ * player's position — not the wash, not a label.
+ */
+private fun addPlayerLayers(style: Style, context: Context, haloColor: Int) {
+    val pin = ContextCompat.getDrawable(context, R.drawable.ic_player_marker)
+        ?: return
+    style.addImage(PLAYER_ICON, pin.toBitmap())
+    style.addSource(GeoJsonSource(PLAYER_SOURCE_ID, EMPTY_FEATURES))
+    style.addLayer(
+        CircleLayer(PLAYER_HALO, PLAYER_SOURCE_ID).withProperties(
+            PropertyFactory.circleRadius(PLAYER_HALO_RADIUS),
+            PropertyFactory.circleColor(haloColor),
+            PropertyFactory.circleOpacity(PLAYER_HALO_OPACITY),
+        ),
+    )
+    style.addLayer(
+        SymbolLayer(PLAYER_PIN, PLAYER_SOURCE_ID).withProperties(
+            PropertyFactory.iconImage(PLAYER_ICON),
+            // The pin's tip marks the spot, not its middle.
+            PropertyFactory.iconAnchor(Property.ICON_ANCHOR_BOTTOM),
+            PropertyFactory.iconAllowOverlap(true),
+            PropertyFactory.iconIgnorePlacement(true),
+        ),
+    )
 }
 
 private fun oceanStyleJson(oceanColor: Int): String {
@@ -438,13 +503,33 @@ private fun addBoundaryLayers(style: Style, parchmentColor: Int) {
     val adm0 = BoundaryFields.LAYER_ADM0
     val adm1 = BoundaryFields.LAYER_ADM1
 
+    fun liftShadow(id: String, layerName: String) =
+        FillLayer(id, BOUNDARY_SOURCE_ID).withSourceLayer(layerName).withProperties(
+            PropertyFactory.fillColor(SHADOW_COLOR),
+            PropertyFactory.fillOpacity(LIFT_SHADOW_OPACITY),
+            PropertyFactory.fillTranslate(LIFT_SHADOW_OFFSET),
+        )
+
+    fun liftLineShadow(id: String, layerName: String) =
+        LineLayer(id, BOUNDARY_SOURCE_ID).withSourceLayer(layerName).withProperties(
+            PropertyFactory.lineColor(SHADOW_COLOR),
+            PropertyFactory.lineWidth(LIFT_LINE_SHADOW_WIDTH),
+            PropertyFactory.lineBlur(LIFT_LINE_SHADOW_BLUR),
+            PropertyFactory.lineOpacity(LIFT_LINE_SHADOW_OPACITY),
+            PropertyFactory.lineTranslate(LIFT_LINE_SHADOW_OFFSET),
+        )
+
     add(areaFill(ADM0_FILL_HIT, adm0, parchmentColor, AREA_FILL_OPACITY))
+    add(liftShadow(ADM0_LIFT_SHADOW, adm0))
     add(areaFill(ADM0_FILL_SELECTED, adm0, BORDER_COLOR, SELECTED_FILL_OPACITY))
+    add(liftLineShadow(ADM0_LIFT_LINE_SHADOW, adm0))
     add(border(ADM0_LINE, adm0, LINE_WIDTH, LINE_OPACITY))
     add(border(ADM0_LINE_SELECTED, adm0, SELECTED_LINE_WIDTH, SELECTED_LINE_OPACITY))
 
     add(areaFill(ADM1_FILL_HIT, adm1, parchmentColor, AREA_FILL_OPACITY))
+    add(liftShadow(ADM1_LIFT_SHADOW, adm1))
     add(areaFill(ADM1_FILL_SELECTED, adm1, BORDER_COLOR, SELECTED_FILL_OPACITY))
+    add(liftLineShadow(ADM1_LIFT_LINE_SHADOW, adm1))
     add(border(ADM1_LINE, adm1, LINE_WIDTH, LINE_OPACITY))
     add(border(ADM1_LINE_SELECTED, adm1, SELECTED_LINE_WIDTH, SELECTED_LINE_OPACITY))
 }
@@ -472,6 +557,13 @@ private fun applyScene(style: Style, scene: MapScene) {
     style.filter(ADM0_FILL_SELECTED, Expression.all(inContinent, Expression.eq(adm0Id, selected)))
     style.filter(ADM0_LINE_SELECTED, Expression.all(inContinent, Expression.eq(adm0Id, selected)))
 
+    // Lifted: the picked country — or, once a region is picked, the country it belongs to.
+    val liftedCountry = Expression.literal(
+        (if (scene.level == MapLevel.Region) scene.countryIso2 else scene.selectedId) ?: NO_SELECTION,
+    )
+    style.filter(ADM0_LIFT_SHADOW, Expression.all(inContinent, Expression.eq(adm0Id, liftedCountry)))
+    style.filter(ADM0_LIFT_LINE_SHADOW, Expression.all(inContinent, Expression.eq(adm0Id, liftedCountry)))
+
     val regionCountry = scene.countryIso2
     if (scene.showsRegionContext && regionCountry != null) {
         val inCountry = Expression.eq(
@@ -482,21 +574,29 @@ private fun applyScene(style: Style, scene: MapScene) {
         style.filter(ADM1_LINE, inCountry)
         style.filter(ADM1_FILL_SELECTED, Expression.all(inCountry, Expression.eq(adm1Id, selected)))
         style.filter(ADM1_LINE_SELECTED, Expression.all(inCountry, Expression.eq(adm1Id, selected)))
+        style.filter(ADM1_LIFT_SHADOW, Expression.all(inCountry, Expression.eq(adm1Id, selected)))
+        style.filter(ADM1_LIFT_LINE_SHADOW, Expression.all(inCountry, Expression.eq(adm1Id, selected)))
         style.show(ADM1_LINE)
         // Region fills stay on at the country level as well, so a region can be tapped without
         // first pressing anything (V3.3.2). `boundaryAt` queries them before the countries and
         // falls through, which is what keeps the neighbouring country reachable (V3.3.3).
         if (scene.showsRegions) {
-            style.show(ADM1_FILL_HIT, ADM1_FILL_SELECTED, ADM1_LINE_SELECTED)
+            style.show(ADM1_FILL_HIT, ADM1_LIFT_SHADOW, ADM1_FILL_SELECTED, ADM1_LIFT_LINE_SHADOW, ADM1_LINE_SELECTED)
         } else {
-            style.hide(ADM1_FILL_HIT, ADM1_FILL_SELECTED, ADM1_LINE_SELECTED)
+            style.hide(ADM1_FILL_HIT, ADM1_LIFT_SHADOW, ADM1_FILL_SELECTED, ADM1_LIFT_LINE_SHADOW, ADM1_LINE_SELECTED)
         }
     } else {
-        style.hide(ADM1_FILL_HIT, ADM1_FILL_SELECTED, ADM1_LINE, ADM1_LINE_SELECTED)
+        style.hide(
+            ADM1_FILL_HIT, ADM1_LIFT_SHADOW, ADM1_FILL_SELECTED,
+            ADM1_LIFT_LINE_SHADOW, ADM1_LINE, ADM1_LINE_SELECTED,
+        )
     }
 
     // Country borders stay visible even while exploring — vision §2 keeps them on the parchment.
-    style.show(ADM0_FILL_HIT, ADM0_LINE, ADM0_FILL_SELECTED, ADM0_LINE_SELECTED, FOG_FILL, FOG_EDGE)
+    style.show(
+        ADM0_FILL_HIT, ADM0_LIFT_SHADOW, ADM0_FILL_SELECTED, ADM0_LIFT_LINE_SHADOW, ADM0_LINE,
+        ADM0_LINE_SELECTED, FOG_FILL, FOG_EDGE,
+    )
 }
 
 /**
@@ -505,20 +605,35 @@ private fun applyScene(style: Style, scene: MapScene) {
  * Paint values only — no source reload and no layer rebuild, so this stays as cheap as a filter
  * change and cannot reintroduce the tile flicker.
  */
-private fun applyContinentTint(style: Style, continentId: String?) {
-    val id = continentId?.let { runCatching { ContinentId.valueOf(it) }.getOrNull() }
+private fun applyContinentTint(style: Style, scene: MapScene) {
+    val id = scene.continentId?.let { runCatching { ContinentId.valueOf(it) }.getOrNull() }
     val tints = ContinentPalette.mapTints(id)
 
     (style.getLayer(FOG_FILL) as? FillLayer)
         ?.setProperties(PropertyFactory.fillColor(tints.parchment.toArgb()))
     (style.getLayer(ADM0_FILL_HIT) as? FillLayer)
         ?.setProperties(PropertyFactory.fillColor(tints.land.toArgb()))
-    (style.getLayer(ADM1_FILL_HIT) as? FillLayer)
-        ?.setProperties(PropertyFactory.fillColor(tints.land.toArgb()))
+    // A picked region stands out twice: lighter itself, and the rest of its country darker.
+    val regionPicked = scene.level == MapLevel.Region && scene.selectedId != null
+    // The picked region itself is left out of the shade, so its lighter colour is not muddied by
+    // the darker one showing through underneath.
+    val hitColor = if (regionPicked) {
+        Expression.switchCase(
+            Expression.eq(Expression.get(BoundaryFields.ADM1_ID), Expression.literal(scene.selectedId.orEmpty())),
+            Expression.color(tints.land.toArgb()),
+            Expression.color(tints.restOfCountry.toArgb()),
+        )
+    } else {
+        Expression.color(tints.land.toArgb())
+    }
+    (style.getLayer(ADM1_FILL_HIT) as? FillLayer)?.setProperties(
+        PropertyFactory.fillColor(hitColor),
+        PropertyFactory.fillOpacity(if (regionPicked) REST_OF_COUNTRY_OPACITY else AREA_FILL_OPACITY),
+    )
     (style.getLayer(BACKGROUND_LAYER) as? BackgroundLayer)
         ?.setProperties(PropertyFactory.backgroundColor(tints.water.toArgb()))
 
-    val highlight = ContinentPalette.selectedHighlight.toArgb()
+    val highlight = tints.selected.toArgb()
     (style.getLayer(ADM0_FILL_SELECTED) as? FillLayer)
         ?.setProperties(PropertyFactory.fillColor(highlight))
     (style.getLayer(ADM1_FILL_SELECTED) as? FillLayer)

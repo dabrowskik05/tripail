@@ -1,13 +1,25 @@
 package com.tripex.pose.domain.geo
 
 /**
- * Single public source for H3 walking resolution, LOD levels, and related thresholds.
+ * Single public source for H3 resolutions and related thresholds.
  * Changing [WALKING_RESOLUTION] invalidates existing stored indices.
  */
 object H3Config {
+    /** What a GPS fix is stored at. */
     const val WALKING_RESOLUTION: Int = 11
-    const val LOD_MID_RESOLUTION: Int = 9
-    const val LOD_FAR_RESOLUTION: Int = 7
+
+    /**
+     * What the walked trail is **drawn** at — one resolution for every zoom and the whole world.
+     *
+     * The trail used to switch between resolutions 11, 9 and 7 as the camera zoomed (`FogLod`),
+     * so the same ground changed shape under the player: a jigsaw of hexagons of three sizes
+     * instead of one corridor. Resolution 9 (~170 m edge) is fine enough next to a 1 km reveal
+     * radius and coarse enough that years of travel stay a few tens of thousands of cells.
+     */
+    const val TRAIL_RESOLUTION: Int = 9
+
+    /** Coarse parents: coverage statistics and continent estimates. */
+    const val COARSE_RESOLUTION: Int = 7
     const val DEFAULT_RING: Int = 1
 
     /**
@@ -51,12 +63,4 @@ object H3Config {
 
     /** Hard cap so a huge radius cannot OOM the device (~k=600 ≈ 1.08M cells). */
     const val MAX_MANUAL_RING: Int = 600
-
-    /**
-     * Fallback only. City radius is derived from the geocoder result by
-     * [com.tripex.pose.domain.geo.RevealRadiusPolicy]; this is what is left when there is
-     * nothing to derive it from.
-     */
-    const val MANUAL_UNLOCK_RADIUS_M: Double = 5_000.0
-
 }

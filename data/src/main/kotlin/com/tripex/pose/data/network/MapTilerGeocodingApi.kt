@@ -20,8 +20,11 @@ internal interface MapTilerGeocodingApi {
     ): MapTilerResponseDto
 
     /**
-     * Reverse geocoding — coordinates to place. Backs the automatic city unlock, so it is asked
-     * only for settlement-sized types; a street address would be useless here.
+     * Reverse geocoding — coordinates to place, for **one** [type] at a time.
+     *
+     * MapTiler rejects `limit` combined with several types, and several types without it return
+     * the *smallest* match: a square or a park instead of the city around it. The caller walks
+     * the types from coarse to fine instead.
      */
     @GET("geocoding/{lng},{lat}.json")
     suspend fun reverse(
@@ -29,7 +32,7 @@ internal interface MapTilerGeocodingApi {
         @Path("lat") lat: Double,
         @Query("key") key: String,
         @Query("language") language: String,
-        @Query("types") types: String = "municipality,municipal_district,place",
+        @Query("types") type: String,
         @Query("limit") limit: Int = 1,
     ): MapTilerResponseDto
 }

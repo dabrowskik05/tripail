@@ -78,8 +78,6 @@ internal object ContinentPalette {
     fun dimmedOutline(id: ContinentId, fraction: Float): Color =
         dimmedFill(id, fraction).darken(OUTLINE_DARKEN)
 
-    /** Selected country or region on the map — one warm highlight, the same on every continent. */
-    val selectedHighlight = Color(0xFFF2DF8E)
 
     /**
      * Stage B takes its whole palette from the continent you entered (vision §2): the parchment,
@@ -93,6 +91,8 @@ internal object ContinentPalette {
             land = base.lighten(LAND_LIGHTEN),
             water = base.lighten(WATER_LIGHTEN).desaturate(WATER_DESATURATE),
             border = base.darken(OUTLINE_DARKEN),
+            selected = base.lighten(SELECTED_SHIFT),
+            restOfCountry = base.darken(SELECTED_SHIFT),
         )
     }
 
@@ -101,12 +101,20 @@ internal object ContinentPalette {
         val land: Color,
         val water: Color,
         val border: Color,
+        /**
+         * The picked country or region: the continent's own colour, 20 % lighter (2026-09-24).
+         * It replaced one warm yellow for every continent, which fought each continent's palette.
+         */
+        val selected: Color,
+        /** The other regions of the country a picked region belongs to: 20 % darker. */
+        val restOfCountry: Color,
     )
 
     private const val PARCHMENT_LIGHTEN = 0.62f
     private const val LAND_LIGHTEN = 0.35f
     private const val WATER_LIGHTEN = 0.78f
     private const val WATER_DESATURATE = 0.25f
+    private const val SELECTED_SHIFT = 0.2f
 
     private fun Color.lighten(fraction: Float): Color = lerp(this, Color.White, fraction)
 

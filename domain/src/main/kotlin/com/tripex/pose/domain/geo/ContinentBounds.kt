@@ -1,17 +1,17 @@
 package com.tripex.pose.domain.geo
 
 /**
- * Approximate land bounding boxes and estimated land-cell counts at [H3Config.LOD_FAR_RESOLUTION].
+ * Approximate land bounding boxes and estimated land-cell counts at [H3Config.COARSE_RESOLUTION].
  *
  * Estimates are order-of-magnitude constants for coverage ratios — not exact coastlines.
- * Changing [H3Config.LOD_FAR_RESOLUTION] requires recalibrating [estimatedLandCells].
+ * Changing [H3Config.COARSE_RESOLUTION] requires recalibrating [estimatedLandCells].
  */
 object ContinentBounds {
     data class ContinentRegion(
         val id: ContinentId,
         val bounds: GeoBounds,
         /**
-         * Rough land-cell estimate at LOD_FAR, kept only as a fallback for when the overview
+         * Rough land-cell estimate at [H3Config.COARSE_RESOLUTION], kept only as a fallback for when the overview
          * atlas fails to load. Since M3.4 the displayed percentage is measured from real atlas
          * geometry by `ObserveAreaCoverageUseCase` — this number is no longer a source of truth.
          */

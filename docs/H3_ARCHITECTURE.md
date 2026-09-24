@@ -28,9 +28,9 @@ Poza zakresem: implementacja `Foreground Service` (Faza 4), stylowanie mapy (Faz
 | :- | :- | :- |
 | D1 | Rozdzielczość bazowa (zapis) | **res 11** |
 | D2 | Promień odkrycia | `gridDisk(k = 1)` (konfigurowalne 0–3) |
-| D3 | Rozdzielczości LOD (render) | res 9 i res 7 (agregacja przez `cellToParent`) |
+| D3 | Rozdzielczość renderu śladu | **stała res 9** dla każdego zoomu, obrys wygładzony (od 2026-09-23; wcześniej LOD 11/9/7) |
 | D4 | Klucz w bazie | `Long` (natywny H3 index), `PRIMARY KEY` |
-| D5 | Zapytanie o viewport | po kolumnie `parentRes7` (`IN (...)`), nie po lat/lng |
+| D5 | Zapytanie o ślad | `SELECT DISTINCT parentRes9` z całej bazy — bez viewportu (wcześniej `parentRes7 IN (...)`) |
 | D6 | Łączenie fixów | `gridPathCells` z limitem dystansu (anty-teleport) |
 | D7 | Mgła | jeden poligon świata z dziurami z `cellsToMultiPolygon` |
 | D8 | Biblioteka | `com.uber:h3-android:4.4.0` (AAR z natywnym JNI) |
@@ -64,21 +64,17 @@ Idąc 1 km z `k = 1` odblokowujesz korytarz ~100 m szerokości:
 - 1 000 km chodzenia ≈ 60 tys. rekordów.
 - 10 000 km (realistyczny sufit po latach) ≈ 600–700 tys. rekordów ≈ **~6 MB surowych danych**, ~15–25 MB bazy z indeksami.
 
-Wniosek: res 11 jest bezpieczny pojemnościowo. Wąskim gardłem jest **render**, nie storage — stąd D3 (LOD).
+Wniosek: res 11 jest bezpieczny pojemnościowo. Wąskim gardłem jest **render**, nie storage — stąd D3.
 
-### 3.4 LOD — dlaczego nie renderujemy res 11 zawsze
+### 3.4 Render śladu — stała res 9 (zmiana 2026-09-23)
 
-Przy oddaleniu mapy widok może obejmować dziesiątki tysięcy heksów res 11. Dlatego każdy rekord przechowuje zdenormalizowane ID rodziców:
+Zapis zostaje w res 11, ale ślad jest **rysowany zawsze z rodziców res 9** (`parentRes9`, liczony raz przy zapisie), dla całego świata i każdego zoomu.
 
-| Zoom mapy | Rozdzielczość renderu | Źródło |
-| :-- | :-- | :-- |
-| ≥ 14 | res 11 | `h3Index` |
-| 11–13 | res 9 | `parentRes9` (DISTINCT) |
-| < 11 | res 7 | `parentRes7` (DISTINCT) |
+**Dlaczego nie LOD.** Wcześniej rozdzielczość renderu zależała od zoomu (≥ 11 → res 11, 8–11 → res 9, < 8 → res 7). Przy przybliżaniu ten sam teren zmieniał kształt — ślad wyglądał jak puzzle z heksów trzech rozmiarów zamiast jednego korytarza. Stała res 9 (krawędź ~170 m) jest dość drobna przy promieniu odkrycia 1 km i dość gruba, żeby lata podróży mieściły się w dziesiątkach tysięcy komórek.
 
-Rodzic jest liczony raz, przy zapisie (`cellToParent`), a nie przy każdym renderze.
+**Wygładzanie.** Obrys z `cellsToMultiPolygon` przechodzi przez `RingSmoothing` (Chaikin, 2 przebiegi), więc zamiast piły z krawędzi heksów widać zaokrąglony pas. Cięcie narożników wchodzi do środka o maks. ¼ krawędzi (~40 m).
 
-> **Uwaga wizualna:** rodzic res 9 jest „odkryty”, gdy odkryto choć jedno jego dziecko — przy oddaleniu mgła cofa się trochę zbyt hojnie. To jest akceptowalne i wręcz pożądane (czytelność), ale trzeba to świadomie zaakceptować, bo powrót do zoomu 15 „zawęża” odkryty obszar.
+> **Uwaga wizualna:** rodzic res 9 jest „odkryty”, gdy odkryto choć jedno jego dziecko — ślad jest przez to o kilkadziesiąt–sto kilkadziesiąt metrów szerszy niż sam dysk 1 km. To świadomie zaakceptowane: kształt jest stabilny i nie zmienia się przy zoomie.
 
 ---
 
@@ -170,7 +166,7 @@ interface H3Converter {
      */
     fun bridge(from: Long, to: Long): Set<Long>
 
-    /** Rodzic w podanej (grubszej) rozdzielczości — do LOD. */
+    /** Rodzic w podanej (grubszej) rozdzielczości — do renderu śladu i statystyk. */
     fun parentOf(cell: Long, resolution: Int): Long
 
     /** Dystans w komórkach; -1 gdy nieobliczalny (zbyt daleko / pentagon). */
@@ -179,16 +175,13 @@ interface H3Converter {
     /** Obrys zbioru komórek jako pierścienie [lng, lat] — gotowe pod GeoJSON. */
     fun outline(cells: Collection<Long>): FogGeometry
 
-    /** Komórki pokrywające prostokąt widoku — do zapytań o viewport. */
-    fun cellsForBounds(bounds: GeoBounds, resolution: Int): Set<Long>
-
     /** Debug/logowanie: 8a2a1072b59ffff zamiast 622054503267303423. */
     fun toDebugString(cell: Long): String
 
     companion object {
         const val BASE_RESOLUTION = 11
-        const val LOD_MID_RESOLUTION = 9
-        const val LOD_FAR_RESOLUTION = 7
+        const val TRAIL_RESOLUTION = 9
+        const val COARSE_RESOLUTION = 7
         const val DEFAULT_K = 1
         const val MAX_BRIDGE_CELLS = 30      // ~1,3 km na res 11
     }
@@ -244,7 +237,7 @@ class H3Utils(private val h3: H3Core) : H3Converter {
 ```
 
 **Ważne kontrakty `h3-java` v4, o które łatwo się potknąć:**
-- `cellsToMultiPolygon` wymaga zbioru **unikalnych** komórek w **jednej** rozdzielczości. Mieszanka res 9 i res 11 da śmieci — stąd `toSet()` i osobne ścieżki LOD.
+- `cellsToMultiPolygon` wymaga zbioru **unikalnych** komórek w **jednej** rozdzielczości. Mieszanka res 9 i res 11 da śmieci — stąd `toSet()` i jedna rozdzielczość renderu (res 9).
 - Drugi parametr `true` = format GeoJSON (`lng, lat`, domknięta pętla). Zapomnienie o nim skutkuje mapą z Polską gdzieś koło Somalii.
 - Metoda zwraca `List<List<List<LatLng>>>`: poligony → pierścienie → wierzchołki. **Pierwszy pierścień to obrys, kolejne to dziury** (niezwiedzone kieszenie wewnątrz odkrytego obszaru).
 
@@ -296,7 +289,7 @@ Kluczowe własności:
 )
 data class UnlockedHexEntity(
     @PrimaryKey val h3Index: Long,   // res 11, natywny indeks H3
-    val parentRes9: Long,            // zdenormalizowane — LOD + zapytania o viewport
+    val parentRes9: Long,            // zdenormalizowane — render śladu
     val parentRes7: Long,
     val discoveredAt: Long,          // epoch millis — pod "timeline" / statystyki
     val resolution: Int = 11         // bezpiecznik na wypadek zmiany D1 w przyszłości
@@ -322,15 +315,11 @@ interface UnlockedHexDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAll(hexes: List<UnlockedHexEntity>)
 
-    /** Render przy zoomie ≥ 14 — pełna rozdzielczość, tylko widoczny obszar. */
-    @Query("SELECT h3Index FROM unlocked_hex WHERE parentRes7 IN (:viewportCells)")
-    fun observeDetailed(viewportCells: Set<Long>): Flow<List<Long>>
+    /** Render śladu — cała baza, rodzice res 9, posortowane (stabilne porównanie). */
+    @Query("SELECT DISTINCT parentRes9 FROM unlocked_hex ORDER BY parentRes9")
+    fun observeTrail(): Flow<List<Long>>
 
-    /** Render przy zoomie 11–13. */
-    @Query("SELECT DISTINCT parentRes9 FROM unlocked_hex WHERE parentRes7 IN (:viewportCells)")
-    fun observeMid(viewportCells: Set<Long>): Flow<List<Long>>
-
-    /** Render przy zoomie < 11 — cała baza, ale garść ID. */
+    /** Statystyki pokrycia — rodzice res 7. */
     @Query("SELECT DISTINCT parentRes7 FROM unlocked_hex")
     fun observeFar(): Flow<List<Long>>
 
@@ -339,13 +328,9 @@ interface UnlockedHexDao {
 }
 ```
 
-### 8.3 Dlaczego zapytanie po `parentRes7`, a nie po lat/lng
+### 8.3 Dlaczego bez zapytań po viewporcie
 
-Klasyczne podejście („`WHERE lat BETWEEN ? AND ? AND lng BETWEEN ? AND ?`") wymagałoby przechowywania współrzędnych środka każdego heksa (dwa dodatkowe `REAL` na rekord) i indeksu złożonego, który w SQLite dla zapytań 2D działa przeciętnie.
-
-Zamiast tego: `cellsForBounds(viewport, res = 7)` zwraca kilka–kilkadziesiąt dużych komórek (`polygonToCells` na prostokącie widoku), a `IN (...)` po zaindeksowanej kolumnie `INTEGER` jest praktycznie natychmiastowe. Zero trygonometrii, zero dodatkowych kolumn float, zero Spatialite.
-
-**Uwaga:** przy bardzo oddalonej kamerze `cellsForBounds` na res 7 może zwrócić tysiące ID — dlatego dla zoomu < 11 używamy `observeFar()` bez filtra przestrzennego (i tak renderujemy wtedy tylko res 7).
+Do 2026-09-22 ślad był pobierany dla widocznego obszaru (`parentRes7 IN (...)`) i w rozdzielczości zależnej od zoomu. Od zmiany D3 geometria śladu nie zależy od kamery: jest jedna dla całego świata, budowana tylko przy zmianie danych, a przycinaniem do ekranu zajmuje się MapLibre. Kolumna `parentRes7` zostaje dla statystyk pokrycia (`observeFar`).
 
 ---
 
@@ -396,7 +381,7 @@ Wyzwalacze przeliczenia: **zmiana zbioru komórek** LUB **`onCameraIdle`** (nie 
 
 - **`fillAntialias(false)`** na warstwie mgły — bez tego na styku sąsiadujących heksów widać włosowate szpary.
 - `GeoJsonSource.Builder` przyjmuje `withTolerance()` — delikatne uproszczenie geometrii mocno tnie liczbę wierzchołków bez widocznej różnicy.
-- Cache: trzymaj ostatnio wygenerowany GeoJSON per (LOD, viewport-key). Powrót kamery do poprzedniego kadru powinien być darmowy.
+- GeoJSON śladu nie zależy od kamery — przeliczany jest tylko przy zmianie danych, nigdy przy ruchu mapy.
 
 ### 9.4 Wariant awaryjny (debug)
 
@@ -440,7 +425,7 @@ Wymagane przypadki dla `H3UtilsTest`:
 11. Punkty oddalone o 5 km → zbiór pusty (zadziałał limit anty-teleport).
 12. `gridDistance` dla nieobliczalnej pary zwraca -1, nie rzuca wyjątkiem.
 
-**LOD**
+**Rodzice**
 13. `parentOf(cell, 9)` daje ten sam wynik dla wszystkich dzieci tego samego rodzica.
 14. Rodzic ma `getResolution() == 9`.
 

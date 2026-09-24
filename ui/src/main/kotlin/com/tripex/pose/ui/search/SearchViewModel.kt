@@ -1,11 +1,15 @@
 package com.tripex.pose.ui.search
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tripex.pose.domain.geo.GeoBounds
 import com.tripex.pose.domain.geo.Place
 import com.tripex.pose.domain.repository.GeocodingRepository
 import com.tripex.pose.domain.usecase.ObserveSearchSuggestionsUseCase
+import com.tripex.pose.domain.usecase.ResolveMapPlaceUseCase
 import com.tripex.pose.domain.usecase.ResolveSearchSelectionUseCase
 import com.tripex.pose.domain.usecase.RevealTarget
 import com.tripex.pose.domain.usecase.SearchSelection
@@ -37,11 +41,24 @@ class SearchViewModel @Inject constructor(
     private val geocoding: GeocodingRepository,
     private val resolveSelection: ResolveSearchSelectionUseCase,
     private val toggleReveal: ToggleRevealUseCase,
+    private val resolveMapPlace: ResolveMapPlaceUseCase,
     observeSearchSuggestions: ObserveSearchSuggestionsUseCase,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SearchContract.State())
     val state: StateFlow<SearchContract.State> = _state.asStateFlow()
+
+    /**
+     * What the search field shows, as Compose state so the field reads it **synchronously**.
+     *
+     * The field used to be fed from [state] through `collectAsStateWithLifecycle`, one frame
+     * behind the keyboard. With a keyboard that composes whole words (autocorrect, Polish
+     * diacritics) the field and the IME fell out of step and typed letters went missing — a full
+     * name was mangled while a short prefix survived. [SearchContract.State.query] is kept in step
+     * for the suggestion pipeline and for submit.
+     */
+    var fieldText: String by mutableStateOf("")
+        private set
 
     private val _effects = Channel<SearchContract.Effect>(Channel.BUFFERED)
     val effects = _effects.receiveAsFlow()
@@ -57,17 +74,25 @@ class SearchViewModel @Inject constructor(
 
     fun onIntent(intent: SearchContract.Intent) {
         when (intent) {
-            is SearchContract.Intent.QueryChanged ->
+            is SearchContract.Intent.QueryChanged -> {
+                fieldText = intent.query
                 _state.update { it.copy(query = intent.query, notFound = false) }
+            }
 
             SearchContract.Intent.Submit -> submit()
             is SearchContract.Intent.SuggestionPicked -> select(intent.place)
-            is SearchContract.Intent.PlacePicked -> select(intent.place)
+            // A map label is only a name and a point; the geocoder supplies the rest first.
+            is SearchContract.Intent.PlacePicked -> {
+                _state.update { it.copy(isSearching = true) }
+                viewModelScope.launch { select(resolveMapPlace(intent.place)) }
+            }
             SearchContract.Intent.Reveal -> apply(reveal = true)
             SearchContract.Intent.Cover -> apply(reveal = false)
             SearchContract.Intent.DismissPanel -> _state.update { it.copy(selection = null) }
-            SearchContract.Intent.Reset ->
+            SearchContract.Intent.Reset -> {
+                fieldText = ""
                 _state.update { SearchContract.State(selection = it.selection) }
+            }
         }
     }
 
@@ -107,6 +132,7 @@ class SearchViewModel @Inject constructor(
                     _state.update {
                         it.copy(isSearching = false, selection = selection, query = "")
                     }
+                    fieldText = ""
                     focus(selection)
                 }
                 .onFailure { _state.update { it.copy(isSearching = false, notFound = true) } }

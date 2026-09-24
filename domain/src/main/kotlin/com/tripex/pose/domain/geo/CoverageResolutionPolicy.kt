@@ -32,9 +32,14 @@ object CoverageResolutionPolicy {
 
     /**
      * Finest resolution worth stepping down to when a polygon turns out to be too small to
-     * contain a single cell centre. Past walking resolution the numbers stop meaning anything.
+     * contain a single cell centre.
+     *
+     * Capped at the trail resolution because the numerator has to be expressed at the same
+     * level, and discovered ground is only stored lifted to resolutions 9 and 7. Refining past
+     * that asked H3 for a parent *finer* than the cell ("res (8) must be between 0 and 7") and
+     * crashed the app. Resolution 9 cells are ~0.1 km², smaller than any country or region.
      */
-    const val FINEST_RESOLUTION: Int = 11
+    const val FINEST_RESOLUTION: Int = H3Config.TRAIL_RESOLUTION
 
     /**
      * Next finer resolution, or `null` at the floor (V3.3.8).

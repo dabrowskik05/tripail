@@ -16,6 +16,7 @@ class MapTilerMapperTest {
         bbox: List<Double>? = null,
         center: List<Double>? = listOf(21.01, 52.23),
         context: List<String> = emptyList(),
+        countryCode: String? = null,
     ) = MapTilerFeatureDto(
         id = "place.1",
         placeName = "Warszawa, Polska",
@@ -23,9 +24,15 @@ class MapTilerMapperTest {
         bbox = bbox,
         center = center,
         placeType = types,
-        properties = MapTilerPropertiesDto(),
+        properties = MapTilerPropertiesDto(countryCode = countryCode),
         context = context.map { MapTilerContextDto(text = it) },
     )
+
+    @Test
+    fun `country code is carried over in upper case`() {
+        assertEquals("PH", feature(types = listOf("country"), countryCode = "ph").toPlace()!!.countryCode)
+        assertNull(feature(countryCode = " ").toPlace()!!.countryCode)
+    }
 
     @Test
     fun `centre is read in GeoJSON order, not lat-lng`() {

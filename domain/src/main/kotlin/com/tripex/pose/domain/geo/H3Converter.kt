@@ -56,7 +56,7 @@ interface H3Converter {
         to: Long,
     ): Set<Long>
 
-    /** Parent cell at a coarser [resolution] — used for LOD. */
+    /** Parent cell at a coarser [resolution] — trail and coverage aggregates. */
     fun parentOf(
         cell: Long,
         resolution: Int,
@@ -80,12 +80,6 @@ interface H3Converter {
      */
     fun cellsForPolygon(
         rings: List<Ring>,
-        resolution: Int,
-    ): Set<Long>
-
-    /** Cells covering a viewport rectangle at [resolution]. */
-    fun cellsForBounds(
-        bounds: GeoBounds,
         resolution: Int,
     ): Set<Long>
 

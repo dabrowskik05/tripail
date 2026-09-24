@@ -98,9 +98,21 @@ internal fun SearchSuggestions(
                 }
                 HorizontalDivider(color = cartoon.inkPrimary.copy(alpha = 0.08f))
             }
+            // The results come from MapTiler's geocoder over OpenStreetMap data; both ask to be
+            // credited wherever their results are shown.
+            item(key = ATTRIBUTION_KEY) {
+                Text(
+                    text = stringResource(R.string.search_attribution),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = cartoon.inkPrimary.copy(alpha = 0.6f),
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
+                )
+            }
         }
     }
 }
+
+private const val ATTRIBUTION_KEY = "attribution"
 
 @Composable
 private fun Place.kindLabel(): String? =

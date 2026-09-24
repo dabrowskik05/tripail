@@ -10,6 +10,7 @@ import kotlin.math.cos
  */
 object GeometryOps {
     private const val EARTH_RADIUS_KM = 6371.0
+    private const val KM_PER_DEGREE = EARTH_RADIUS_KM * Math.PI / 180.0
 
     /**
      * Ray-casting point-in-polygon. Boundary points count as inside.
@@ -101,6 +102,57 @@ object GeometryOps {
         }
         val midLat = (north + south) / 2.0
         return abs(sum / 2.0) * cos(midLat * Math.PI / 180.0)
+    }
+
+    /**
+     * Splits a feature's flat ring list into polygons — each an exterior followed by its holes,
+     * the convention [pointInPolygon] and H3's polyfill expect.
+     *
+     * The boundary bundle hands back every ring of a feature in one list. Treating the first as
+     * *the* exterior and the rest as holes was wrong for every country in several pieces: when the
+     * first ring was a small island, Spain or France measured as that island, the coverage ruler
+     * refined itself past the stored resolution and the app crashed. Nesting decides instead: a
+     * ring inside an even number of others is land, inside an odd number it is a hole of the
+     * innermost ring around it.
+     */
+    fun polygonsOf(rings: List<Ring>): List<List<Ring>> {
+        val usable = rings.filter { it.size >= 3 }
+        if (usable.size <= 1) return usable.map { listOf(it) }
+        val boxes = usable.map { boundsOf(listOf(it)) }
+        val containers = usable.indices.map { i ->
+            usable.indices.filter { j -> j != i && contains(usable[j], boxes[j], usable[i], boxes[i]) }
+        }
+        val polygons = LinkedHashMap<Int, MutableList<Ring>>()
+        for (i in usable.indices) {
+            if (containers[i].size % 2 == 0) polygons[i] = mutableListOf(usable[i])
+        }
+        for (i in usable.indices) {
+            if (containers[i].size % 2 == 0) continue
+            // The innermost container is the one with the most containers of its own.
+            val owner = containers[i].maxByOrNull { containers[it].size } ?: continue
+            polygons[owner]?.add(usable[i])
+        }
+        return polygons.values.toList()
+    }
+
+    /**
+     * Area of the land the rings describe, in km² — holes subtracted, pieces added up.
+     *
+     * The bounding box is no measure for a country in several pieces: France with French Guiana
+     * and Réunion spans most of the planet.
+     */
+    fun areaKm2(rings: List<Ring>): Double =
+        polygonsOf(rings).sumOf { polygon ->
+            val land = approximateRingArea(polygon.first())
+            val water = polygon.drop(1).sumOf { approximateRingArea(it) }
+            (land - water).coerceAtLeast(0.0)
+        } * KM_PER_DEGREE * KM_PER_DEGREE
+
+    private fun contains(outer: Ring, outerBox: GeoBounds, inner: Ring, innerBox: GeoBounds): Boolean {
+        if (innerBox.north > outerBox.north || innerBox.south < outerBox.south) return false
+        if (innerBox.east > outerBox.east || innerBox.west < outerBox.west) return false
+        val (x, y) = inner.first()
+        return pointInRing(outer, x, y)
     }
 
     fun centroidOf(bounds: GeoBounds): Pair<Double, Double> {

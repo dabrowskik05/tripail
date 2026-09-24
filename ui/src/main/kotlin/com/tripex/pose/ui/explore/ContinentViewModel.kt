@@ -11,11 +11,14 @@ import com.tripex.pose.domain.geo.ContinentId
 import com.tripex.pose.domain.geo.atlas.AdminLevel
 import com.tripex.pose.domain.geo.atlas.BoundaryGeometrySource
 import com.tripex.pose.domain.geo.projection.GeometryOps
+import com.tripex.pose.domain.location.LocationTracker
+import com.tripex.pose.domain.location.TrackingSession
 import com.tripex.pose.domain.location.TrackingSessionRepository
 import com.tripex.pose.ui.navigation.Continent
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -41,6 +44,7 @@ class ContinentViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val boundaries: BoundaryGeometrySource,
     private val trackingSession: TrackingSessionRepository,
+    private val locationTracker: LocationTracker,
     private val logger: Logger,
 ) : ViewModel() {
 
@@ -67,13 +71,18 @@ class ContinentViewModel @Inject constructor(
             viewModelScope.launch {
                 _effects.send(ContinentContract.Effect.LimitCamera(ContinentFocusPolicy.cameraLimit(bounds)))
 
-                val focus = ContinentFocusPolicy.focus(
-                    continent = bounds,
-                    fix = trackingSession.load().lastFix,
-                    nowMs = System.currentTimeMillis(),
-                )
+                val now = System.currentTimeMillis()
+                // Asked fresh: the service's stored fix is only as recent as the last 50 m walked,
+                // so after a day at home it was too old to use and the flight silently skipped.
+                val fix = locationTracker.currentLocation()
+                    ?.let { TrackingSession.Fix(it.latitude, it.longitude, now) }
+                    ?: trackingSession.load().lastFix
+                val focus = ContinentFocusPolicy.focus(continent = bounds, fix = fix, nowMs = now)
                 if (focus != null) {
                     logger.i(TAG, "Player is on $continentId — settling on them")
+                    // The continent is shown whole first; the flight follows it rather than
+                    // replacing it (the camera queues requests, see MapHostState.flyTo).
+                    delay(SHOW_CONTINENT_MS)
                     _effects.send(ContinentContract.Effect.FocusPlayer(focus))
                 }
             }
@@ -109,5 +118,8 @@ class ContinentViewModel @Inject constructor(
 
     private companion object {
         const val TAG = "ContinentLevel"
+
+        /** How long the whole continent stays in view before the camera settles on the player. */
+        const val SHOW_CONTINENT_MS = 700L
     }
 }

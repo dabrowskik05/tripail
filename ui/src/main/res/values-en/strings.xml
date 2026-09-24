@@ -1,10 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="tracking_open_settings">App settings</string>
-    <string name="tracking_status_idle">Ready to explore</string>
-    <string name="tracking_status_active">Exploring</string>
-    <string name="tracking_status_permission">No location permission</string>
-    <string name="tracking_status_gps_off">GPS is off</string>
     <string name="status_precise_location_required">Precise location is required — turn it on in app settings.</string>
     <string name="status_permission_missing">No location permission.</string>
     <string name="status_location_disabled">Location is turned off on this device.</string>
@@ -20,6 +16,7 @@
     <string name="search_placeholder">e.g. Warsaw</string>
     <string name="search_not_found">No place found</string>
     <string name="search_attribution">Search © MapTiler © OpenStreetMap</string>
+    <string name="logo_content_description">Tripail</string>
     <string name="loading_enter">Enter</string>
     <string name="loading_preparing">Getting your world ready…</string>
     <string name="loading_failed">Could not prepare the data.</string>
@@ -37,7 +34,6 @@
     <string name="place_kind_village">Village</string>
     <string name="place_kind_address">Address</string>
     <string name="place_kind_poi">Place</string>
-    <string name="place_dismiss">Close</string>
     <string name="place_reveal">Reveal</string>
     <string name="place_cover">Cover</string>
     <string name="place_working">One moment…</string>
@@ -58,16 +54,14 @@
     <string name="continent_asia">Asia</string>
     <string name="continent_oceania">Australia and Oceania</string>
     <string name="continent_antarctica">Antarctica</string>
-    <string name="area_back">Back</string>
     <string name="continent_select">Select</string>
     <string name="continent_pan_cd">Move the world east or west</string>
     <string name="area_coverage">Explored: %1$d%%</string>
-    <string name="area_region_unlock">Reveal the whole region</string>
+    <string name="area_region_unlock">Reveal</string>
     <string name="area_region_unlocking">Revealing…</string>
     <string name="area_region_cover">Cover the region</string>
-    <string name="area_pick_region">Tap a region to see how much you have explored</string>
-    <string name="area_boundaries_unavailable">The boundary map is still being prepared</string>
     <string name="area_back_cd">Go up one level</string>
     <string name="area_pick_country">Tap a country to see how much you have explored</string>
     <string name="area_country_unknown">There is no country to pick here</string>
+    <string name="map_maptiler_logo_cd">MapTiler logo — opens maptiler.com</string>
 </resources>

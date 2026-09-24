@@ -1,7 +1,6 @@
 package com.tripex.pose.ui.continent.components
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -44,8 +43,10 @@ private class ContinentPath(
  * basemap, no parchment. Those belong to Stage B, which is a separate screen on purpose.
  *
  * The world **fills** the viewport rather than being letterboxed inside it, and the only gesture
- * is a horizontal drag: zoom does not exist here, because this is a menu, not a map. Vertically
- * the whole latitude band is always on screen, so Antarctica stays reachable without scrolling.
+ * is a tap: no zoom and no drag, because this is a menu, not a map. Sideways movement belongs to
+ * the slider in the bottom panel alone — a finger drag fighting the slider over one value is what
+ * made the world jitter. Vertically the whole latitude band is always on screen, so Antarctica
+ * stays reachable without scrolling.
  *
  * Hit-testing runs on geographic coordinates via [GeometryOps.pointInRing], so tapping an island
  * selects its parent continent.
@@ -60,16 +61,13 @@ internal fun ContinentMenuCanvas(
     /**
      * Where the world sits horizontally, 0 (west) to 1 (east) — see [WorldPan].
      *
-     * Hoisted out of the canvas so the slider below the map and the drag gesture are two views of
-     * one value rather than two sources of truth fighting each other (V3.6.4).
+     * Driven only by the slider below the map; the canvas reads it and never writes it.
      */
     panFraction: Float = WorldPan.CENTRE,
-    onPanFractionChange: (Float) -> Unit = {},
 ) {
     val density = LocalDensity.current
     val paths = remember(shapes) { shapes.map { it.toPath() } }
     val currentOnTap by rememberUpdatedState(onTap)
-    val currentOnPan by rememberUpdatedState(onPanFractionChange)
 
     /** Size of the last layout pass, needed to turn the fraction into pixels. */
     var canvasSize by remember { mutableStateOf(androidx.compose.ui.geometry.Size.Zero) }
@@ -81,28 +79,19 @@ internal fun ContinentMenuCanvas(
         null
     }
 
+    // The tap detector outlives recompositions, so it must read the pan through a state holder —
+    // a captured value stays at the first frame's centred world while the slider moves the drawing.
+    val currentPan by rememberUpdatedState(pan)
+
     val outlinePx = with(density) { OutlineWidth.toPx() }
     val selectedOutlinePx = with(density) { SelectedOutlineWidth.toPx() }
 
     Canvas(
         modifier = modifier
             .fillMaxSize()
-            .pointerInput(Unit) {
-                detectHorizontalDragGestures { change, dragAmount ->
-                    val width = size.width.toFloat()
-                    val height = size.height.toFloat()
-                    val current = pan ?: WorldFit.centeredPan(width, height)
-                    val next = (current + dragAmount).coerceIn(WorldFit.panRange(width, height))
-                    // Reported as a fraction so the slider follows the drag without either one
-                    // driving the other in a loop.
-                    currentOnPan(WorldPan.toFraction(next, width, height))
-                    // Consumed so the tap detector does not read a drag as a continent pick.
-                    change.consume()
-                }
-            }
             .pointerInput(paths) {
                 detectTapGestures { tap ->
-                    val fit = WorldFit.of(size.width.toFloat(), size.height.toFloat(), pan)
+                    val fit = WorldFit.of(size.width.toFloat(), size.height.toFloat(), currentPan)
                     val (lng, lat) = fit.toLngLat(tap.x, tap.y)
                     currentOnTap(paths.continentAt(lng, lat))
                 }
@@ -138,7 +127,7 @@ internal fun ContinentMenuCanvas(
  *
  * Covering rather than fitting is what removes the wide empty bands of ocean above and below the
  * continents; the cost is that the world is then wider than the screen, which is exactly what the
- * horizontal drag is for.
+ * slider is for.
  *
  * Kept as a value type with its own factory so the placement can be unit-tested — a canvas that
  * silently renders off-screen looks exactly like a canvas with no data.

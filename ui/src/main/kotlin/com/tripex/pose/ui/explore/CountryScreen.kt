@@ -55,7 +55,9 @@ fun CountryRoute(
         title = state.name,
         onBack = onBack,
         onTap = { viewModel.onIntent(CountryContract.Intent.FeatureTapped(it)) },
-    ) {
-        AreaStatsPanel(flag = state.flag, title = state.name, coverage = state.coverage)
+        panel = state,
+        panelKey = { it.iso2 },
+    ) { shown ->
+        AreaStatsPanel(flag = shown.flag, title = shown.name, coverage = shown.coverage)
     }
 }

@@ -20,6 +20,11 @@ class BoundaryMatcher
     ) {
         /** @return the bundle feature containing [place], or `null` when the bundle has none. */
         suspend fun match(level: AdminLevel, place: Place): BoundaryFeature? {
+            // A country with a known code needs no geometry at all — and its centre may be at sea.
+            val code = place.countryCode
+            if (level == AdminLevel.Adm0 && place.kind == PlaceKind.Country && code != null) {
+                boundaries.feature(AdminLevel.Adm0, code)?.let { return it }
+            }
             val hit = boundaries.featureAt(level, place.latitude, place.longitude) ?: return null
             // A point-in-polygon hit is already decisive; the name check only guards against a
             // centre that fell into a neighbour across a border.

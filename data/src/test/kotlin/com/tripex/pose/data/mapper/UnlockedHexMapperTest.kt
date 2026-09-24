@@ -23,8 +23,8 @@ class UnlockedHexMapperTest {
         val discoveredAt = 1_700_000_000_000L
         val entity = index.toUnlockedHexEntity(h3, discoveredAt)
         assertEquals(index, entity.h3Index)
-        assertEquals(h3.parentOf(index, H3Config.LOD_MID_RESOLUTION), entity.parentRes9)
-        assertEquals(h3.parentOf(index, H3Config.LOD_FAR_RESOLUTION), entity.parentRes7)
+        assertEquals(h3.parentOf(index, H3Config.TRAIL_RESOLUTION), entity.parentRes9)
+        assertEquals(h3.parentOf(index, H3Config.COARSE_RESOLUTION), entity.parentRes7)
         assertEquals(discoveredAt, entity.discoveredAt)
         assertEquals(H3Config.WALKING_RESOLUTION, entity.resolution)
     }

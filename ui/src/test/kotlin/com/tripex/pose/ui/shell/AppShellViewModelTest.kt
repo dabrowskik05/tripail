@@ -20,6 +20,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
@@ -160,23 +161,47 @@ class AppShellViewModelTest {
         }
     }
 
-    private fun createViewModel() = AppShellViewModel(
-        mapStyleProvider = mapStyleProvider,
-        h3Converter = h3Converter,
-        atlasRepository = atlasRepository,
-        pmTilesBootstrap = pmTilesBootstrap,
-        observeUnlockedCount = observeUnlockedCount,
-        appLanguage = FakeAppLanguage(),
-    )
+    @Test
+    fun `language picker is needed until a language is saved, then never again`() =
+        runTest(testDispatcher) {
+            val language = FakeAppLanguage(chosen = null)
+            val viewModel = createViewModel(language)
 
-    /** Already chosen, so the language picker stays out of these tests' way. */
+            viewModel.state.test {
+                runCurrent()
+                assertTrue(expectMostRecentItem().needsLanguage)
+
+                language.set(AppLanguage.English)
+                runCurrent()
+                assertFalse(expectMostRecentItem().needsLanguage)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    private fun createViewModel(language: AppLanguageRepository = FakeAppLanguage()) =
+        AppShellViewModel(
+            mapStyleProvider = mapStyleProvider,
+            h3Converter = h3Converter,
+            atlasRepository = atlasRepository,
+            pmTilesBootstrap = pmTilesBootstrap,
+            observeUnlockedCount = observeUnlockedCount,
+            appLanguage = language,
+        )
+
+    /** Already chosen by default, so the language picker stays out of the other tests' way. */
     private class FakeAppLanguage(
-        private val chosen: AppLanguage? = AppLanguage.Polish,
+        chosen: AppLanguage? = AppLanguage.Polish,
     ) : AppLanguageRepository {
-        override suspend fun selected(): AppLanguage? = chosen
+        private val current = MutableStateFlow(chosen)
 
-        override fun observe(): Flow<AppLanguage> = flowOf(chosen ?: AppLanguage.DEFAULT)
+        override suspend fun selected(): AppLanguage? = current.value
 
-        override suspend fun set(language: AppLanguage) = Unit
+        override fun observeSelected(): Flow<AppLanguage?> = current
+
+        override fun observe(): Flow<AppLanguage> = current.map { it ?: AppLanguage.DEFAULT }
+
+        override suspend fun set(language: AppLanguage) {
+            current.value = language
+        }
     }
 }

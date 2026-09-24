@@ -183,6 +183,26 @@ class ObserveAreaCoverageUseCaseTest {
         assertEquals("the denominator must be written again after invalidation", 2, cache.writes)
     }
 
+    /**
+     * The crash from the device: an area too small for resolution 7 refined itself to 8, and the
+     * numerator — resolution-7 parents — could not be lifted to a finer level. Past 7 the trail
+     * parents (resolution 9) are read instead.
+     */
+    @Test
+    fun `an area only measurable finer than resolution 7 counts the trail parents`() =
+        runTest(dispatcher) {
+            val h3 = FakeH3(areaCells = setOf(90L, 91L), smallestResolution = H3Config.TRAIL_RESOLUTION)
+            val repository = FakeRepository(parents = flowOf(listOf(70L)), trail = flowOf(listOf(90L)))
+            val useCase = useCase(h3 = h3, repository = repository)
+
+            useCase(poland).test {
+                val coverage = awaitItem() as AreaCoverage.Known
+                assertEquals(H3Config.TRAIL_RESOLUTION, coverage.resolution)
+                assertEquals(1, coverage.discoveredCells)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
     private fun useCase(
         areaCells: Set<Long> = setOf(1L),
         unlockedParents: List<Long> = emptyList(),
@@ -226,10 +246,12 @@ class ObserveAreaCoverageUseCaseTest {
         }
     }
 
-    private class FakeRepository(private val parents: Flow<List<Long>>) : UnlockedAreaRepository {
+    private class FakeRepository(
+        private val parents: Flow<List<Long>>,
+        private val trail: Flow<List<Long>> = flowOf(emptyList()),
+    ) : UnlockedAreaRepository {
         override suspend fun unlock(hexes: Set<Long>): Int = 0
-        override fun observeDetailed(viewportCells: Set<Long>): Flow<List<Long>> = flowOf(emptyList())
-        override fun observeMid(viewportCells: Set<Long>): Flow<List<Long>> = flowOf(emptyList())
+        override fun observeTrail(): Flow<List<Long>> = trail
         override fun observeFar(): Flow<List<Long>> = parents
         override fun observeCount(): Flow<Int> = flowOf(0)
     }
@@ -255,7 +277,11 @@ class ObserveAreaCoverageUseCaseTest {
     }
 
     /** Identity parent mapping keeps the test about the intersection, not about H3 itself. */
-    private class FakeH3(private val areaCells: Set<Long>) : H3Converter {
+    private class FakeH3(
+        private val areaCells: Set<Long>,
+        /** Coarser resolutions find no cell centre inside the area, as for a tiny island. */
+        private val smallestResolution: Int = 0,
+    ) : H3Converter {
         var cellsForPolygonCalls = 0
             private set
 
@@ -269,12 +295,11 @@ class ObserveAreaCoverageUseCaseTest {
         override fun parentOf(cell: Long, resolution: Int): Long = cell
         override fun gridDistance(from: Long, to: Long): Int = -1
         override fun outline(cells: Collection<Long>): FogGeometry = FogGeometry.EMPTY
-        override fun cellsForBounds(bounds: GeoBounds, resolution: Int): Set<Long> = emptySet()
         override fun toDebugString(cell: Long): String = cell.toString()
 
         override fun cellsForPolygon(rings: List<Ring>, resolution: Int): Set<Long> {
             cellsForPolygonCalls++
-            return areaCells
+            return if (resolution >= smallestResolution) areaCells else emptySet()
         }
     }
 }

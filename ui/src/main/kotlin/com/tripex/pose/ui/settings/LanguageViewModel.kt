@@ -30,8 +30,16 @@ class LanguageViewModel @Inject constructor(
             initialValue = AppLanguage.DEFAULT,
         )
 
-    fun select(language: AppLanguage) {
-        viewModelScope.launch { repository.set(language) }
+    /**
+     * [onSaved] runs only once the choice is on disk. The first-launch picker navigates away in
+     * it, and leaving earlier cleared this view model mid-write — the choice was cancelled and
+     * the picker came back on every launch.
+     */
+    fun select(language: AppLanguage, onSaved: () -> Unit = {}) {
+        viewModelScope.launch {
+            repository.set(language)
+            onSaved()
+        }
     }
 
     private companion object {

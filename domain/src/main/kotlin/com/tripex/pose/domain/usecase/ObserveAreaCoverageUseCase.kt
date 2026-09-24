@@ -19,6 +19,7 @@ import com.tripex.pose.domain.repository.UnlockedRegionRepository
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
+import com.tripex.pose.domain.geo.H3Config
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -89,7 +90,10 @@ class ObserveAreaCoverageUseCase
 
                 val navArg = area.toNavArg()
                 val cached = areaStats.denominator(navArg)
-                val measured = measure(area, rings, cached?.resolution ?: resolutionFor(rings))
+                // Always derived from the geometry, never from the cached row: rows written before
+                // multi-piece areas were measured correctly can hold a resolution (8, 10…) that
+                // the numerator cannot be lifted to.
+                val measured = measure(area, rings, resolutionFor(rings))
                 if (measured == null) {
                     emit(AreaCoverage.Unavailable)
                     return@flow
@@ -101,7 +105,7 @@ class ObserveAreaCoverageUseCase
 
                 emitAll(
                     combine(
-                        repository.observeFar(),
+                        discoveredParents(resolution),
                         regionRepository.observeAll(),
                         placeRepository.observeAll(),
                     ) { parents, regions, places ->
@@ -177,8 +181,17 @@ class ObserveAreaCoverageUseCase
             return null
         }
 
+        /** Land area, not the box around it — France's box spans Guiana and Réunion. */
         private fun resolutionFor(rings: List<Ring>): Int =
-            CoverageResolutionPolicy.resolutionFor(GeometryOps.areaKm2(GeometryOps.boundsOf(rings)))
+            CoverageResolutionPolicy.resolutionFor(GeometryOps.areaKm2(rings))
+
+        /**
+         * Walked ground at a level that can be lifted to [resolution]: a parent can only be
+         * taken towards coarser cells, so anything finer than the coarse parents reads the trail
+         * parents instead.
+         */
+        private fun discoveredParents(resolution: Int): Flow<List<Long>> =
+            if (resolution <= H3Config.COARSE_RESOLUTION) repository.observeFar() else repository.observeTrail()
 
         /** Cells of a whole-region unlock, measured in the same units as the denominator. */
         private suspend fun regionCells(

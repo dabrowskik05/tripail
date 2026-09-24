@@ -81,8 +81,22 @@ class H3UtilsTest {
     }
 
     @Test
+    fun `a country in several pieces is filled piece by piece, even with an island first`() {
+        // A small island listed before the mainland used to become "the country", with the
+        // mainland treated as a hole — the root of the Spain / France / Portugal crash.
+        val island = listOf(3.0 to 39.5, 3.4 to 39.5, 3.4 to 39.8, 3.0 to 39.8, 3.0 to 39.5)
+        val mainland = listOf(-6.0 to 38.0, -1.0 to 38.0, -1.0 to 42.0, -6.0 to 42.0, -6.0 to 38.0)
+
+        val both = utils.cellsForPolygon(listOf(island, mainland), resolution = 5)
+        val mainlandOnly = utils.cellsForPolygon(listOf(mainland), resolution = 5)
+
+        assertTrue(mainlandOnly.isNotEmpty())
+        assertTrue(both.containsAll(mainlandOnly))
+    }
+
+    @Test
     fun `revealAround 5km returns large contiguous disk`() {
-        val disk = utils.revealAround(WARSAW_LAT, WARSAW_LNG, H3Config.MANUAL_UNLOCK_RADIUS_M)
+        val disk = utils.revealAround(WARSAW_LAT, WARSAW_LNG, radiusMeters = 5_000.0)
         // k ≈ 117 → 3*k*(k+1)+1 cells
         assertTrue(disk.size > 1_000)
         assertTrue(disk.size < 50_000)
@@ -132,19 +146,19 @@ class H3UtilsTest {
     fun `parentOf res9 is shared by disk children`() {
         val disk = utils.revealDisk(WARSAW_LAT, WARSAW_LNG, k = 0)
         val cell = disk.first()
-        val parent = utils.parentOf(cell, H3Config.LOD_MID_RESOLUTION)
-        assertEquals(H3Config.LOD_MID_RESOLUTION, h3Core.getResolution(parent))
-        assertEquals(parent, utils.parentOf(cell, H3Config.LOD_MID_RESOLUTION))
+        val parent = utils.parentOf(cell, H3Config.TRAIL_RESOLUTION)
+        assertEquals(H3Config.TRAIL_RESOLUTION, h3Core.getResolution(parent))
+        assertEquals(parent, utils.parentOf(cell, H3Config.TRAIL_RESOLUTION))
     }
 
     @Test
     fun `parentOf children under same parent share res9`() {
         val center = utils.cellAt(WARSAW_LAT, WARSAW_LNG)
-        val parentMid = utils.parentOf(center, H3Config.LOD_MID_RESOLUTION)
+        val parentMid = utils.parentOf(center, H3Config.TRAIL_RESOLUTION)
         val children = h3Core.cellToChildren(parentMid, H3Config.WALKING_RESOLUTION)
-        val parents = children.map { utils.parentOf(it, H3Config.LOD_MID_RESOLUTION) }.toSet()
+        val parents = children.map { utils.parentOf(it, H3Config.TRAIL_RESOLUTION) }.toSet()
         assertEquals(1, parents.size)
-        assertEquals(H3Config.LOD_MID_RESOLUTION, h3Core.getResolution(parents.first()))
+        assertEquals(H3Config.TRAIL_RESOLUTION, h3Core.getResolution(parents.first()))
     }
 
     // --- Geometry ---

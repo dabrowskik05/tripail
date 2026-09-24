@@ -17,7 +17,7 @@ internal data class MapTilerFeatureDto(
     val bbox: List<Double>? = null,
     /** `[lng, lat]`. */
     val center: List<Double>? = null,
-    @SerialName("place_type") val placeType: List<String> = emptyList(),
+    @SerialName("place_type") val placeType: List<String?> = emptyList(),
     val properties: MapTilerPropertiesDto? = null,
     val context: List<MapTilerContextDto> = emptyList(),
 )
@@ -25,7 +25,14 @@ internal data class MapTilerFeatureDto(
 @Serializable
 internal data class MapTilerPropertiesDto(
     val kind: String? = null,
-    @SerialName("place_type_name") val placeTypeName: List<String> = emptyList(),
+    /**
+     * Nullable elements on purpose: landforms ("Norwegian Lake") arrive as `[null]`. A strict
+     * `List<String>` failed the **whole** response on that one feature — full Polish names pull
+     * such features in, so they found nothing while their prefixes and English names worked.
+     */
+    @SerialName("place_type_name") val placeTypeName: List<String?> = emptyList(),
+    /** ISO 3166-1 alpha-2, lowercase. */
+    @SerialName("country_code") val countryCode: String? = null,
 )
 
 /** Parent areas — region, country. Used to tell homonyms apart without extra requests. */

@@ -55,6 +55,11 @@ data class SearchSelection(
     val isRevealed: Boolean,
     /** False for ground that was earned rather than chosen, and for countries. */
     val canCover: Boolean,
+    /**
+     * Country the place lies in, ISO alpha-2, when known — so the map can show that country's
+     * regions around a picked city.
+     */
+    val countryIso2: String? = null,
 )
 
 /**
@@ -148,6 +153,9 @@ class ResolveSearchSelectionUseCase
                 isRevealed = existing != null,
                 // Ground earned by standing in it is not the player's to hand back.
                 canCover = existing?.source == UnlockedPlaceRepository.Source.Manual,
+                // The geocoder usually says; a bare map label does not, and then the bundle does.
+                countryIso2 = place.countryCode
+                    ?: boundaries.featureAt(AdminLevel.Adm0, place.latitude, place.longitude)?.id,
             )
         }
 

@@ -15,6 +15,7 @@ import com.tripex.pose.domain.repository.UnlockedRegionRepository
 import com.tripex.pose.domain.settings.AppLanguage
 import com.tripex.pose.domain.settings.AppLanguageRepository
 import com.tripex.pose.domain.usecase.ObserveSearchSuggestionsUseCase
+import com.tripex.pose.domain.usecase.ResolveMapPlaceUseCase
 import com.tripex.pose.domain.usecase.ResolveSearchSelectionUseCase
 import com.tripex.pose.domain.usecase.RevealTarget
 import com.tripex.pose.domain.usecase.ToggleRevealUseCase
@@ -181,6 +182,8 @@ class SearchViewModelTest {
     private val language = object : AppLanguageRepository {
         override suspend fun selected() = AppLanguage.Polish
 
+        override fun observeSelected(): Flow<AppLanguage?> = flowOf(AppLanguage.Polish)
+
         override fun observe(): Flow<AppLanguage> = flowOf(AppLanguage.Polish)
 
         override suspend fun set(language: AppLanguage) = Unit
@@ -190,6 +193,7 @@ class SearchViewModelTest {
         val unlockPlace = UnlockPlaceUseCase(places)
         return SearchViewModel(
             geocoding = geocoding,
+            resolveMapPlace = ResolveMapPlaceUseCase(geocoding),
             resolveSelection = ResolveSearchSelectionUseCase(
                 boundaryMatcher = BoundaryMatcher(Bundle),
                 boundaries = Bundle,

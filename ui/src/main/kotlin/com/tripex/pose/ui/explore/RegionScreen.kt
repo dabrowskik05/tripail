@@ -21,6 +21,7 @@ fun RegionRoute(
     host: MapHostState,
     chrome: AppChromeState,
     onOpenMap: (AreaKey, GeoBounds, String) -> Unit,
+    onOpenCountry: (iso2: String, bounds: GeoBounds) -> Unit,
     onBack: () -> Unit,
     viewModel: RegionViewModel = hiltViewModel(),
 ) {
@@ -30,6 +31,7 @@ fun RegionRoute(
         viewModel.effects.collectLatest { effect ->
             when (effect) {
                 is RegionContract.Effect.OpenMap -> onOpenMap(effect.area, effect.bounds, effect.label)
+                is RegionContract.Effect.OpenCountry -> onOpenCountry(effect.iso2, effect.bounds)
             }
         }
     }
@@ -46,20 +48,22 @@ fun RegionRoute(
         title = state.name,
         onBack = onBack,
         onTap = { viewModel.onIntent(RegionContract.Intent.RegionTapped(it)) },
-    ) {
+        panel = state,
+        panelKey = { it.regionId },
+    ) { shown ->
         AreaStatsPanel(
-            flag = state.flag,
-            title = state.name,
-            coverage = state.coverage,
+            flag = shown.flag,
+            title = shown.name,
+            coverage = shown.coverage,
             actionLabel = stringResource(
                 when {
-                    state.isUnlocking -> R.string.area_region_unlocking
-                    state.isUnlocked -> R.string.area_region_cover
+                    shown.isUnlocking -> R.string.area_region_unlocking
+                    shown.isUnlocked -> R.string.area_region_cover
                     else -> R.string.area_region_unlock
                 },
             ),
             // Always live except mid-write: revealing a region must be undoable from the same spot.
-            onAction = if (state.isUnlocking) {
+            onAction = if (shown.isUnlocking) {
                 null
             } else {
                 { viewModel.onIntent(RegionContract.Intent.ToggleRegionUnlock) }

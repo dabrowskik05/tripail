@@ -1,7 +1,6 @@
 package com.tripex.pose.domain.usecase
 
 import com.tripex.pose.domain.geo.FogGeometry
-import com.tripex.pose.domain.geo.GeoBounds
 import com.tripex.pose.domain.geo.H3Config
 import com.tripex.pose.domain.geo.H3Converter
 import com.tripex.pose.domain.location.DomainLocation
@@ -133,9 +132,7 @@ class UnlockAreaUseCaseTest {
             return unlocked.size - before
         }
 
-        override fun observeDetailed(viewportCells: Set<Long>): Flow<List<Long>> = flowOf(emptyList())
-
-        override fun observeMid(viewportCells: Set<Long>): Flow<List<Long>> = flowOf(emptyList())
+        override fun observeTrail(): Flow<List<Long>> = flowOf(emptyList())
 
         override fun observeFar(): Flow<List<Long>> = flowOf(emptyList())
 
@@ -201,11 +198,6 @@ class UnlockAreaUseCaseTest {
         ): Int = bridgeCells.size
 
         override fun outline(cells: Collection<Long>): FogGeometry = FogGeometry.EMPTY
-
-        override fun cellsForBounds(
-            bounds: GeoBounds,
-            resolution: Int,
-        ): Set<Long> = emptySet()
 
         override fun toDebugString(cell: Long): String = cell.toString()
     }

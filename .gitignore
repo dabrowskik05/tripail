@@ -3,15 +3,17 @@
 build/
 **/build/
 
-# AGP dumps next to a checked-in demo APK — keep app/release/*.apk, ignore the rest
-app/release/output-metadata.json
-app/release/baselineProfiles/
+# Release builds — the APK is published on GitHub Releases, never committed
+app/release/
+*.apk
+*.aab
 
 # Local machine
 local.properties
 *.iml
 .idea/
 .DS_Store
+.kotlin/
 
 # Captures / profiling
 captures/

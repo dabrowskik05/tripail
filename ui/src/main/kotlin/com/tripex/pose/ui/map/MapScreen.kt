@@ -20,7 +20,6 @@ import androidx.compose.ui.unit.dp
 import com.tripex.pose.domain.location.TrackingState
 import com.tripex.pose.ui.R
 import com.tripex.pose.ui.map.components.BackgroundTrackingDialog
-import com.tripex.pose.ui.map.components.CommunityDialog
 import com.tripex.pose.ui.theme.TripailTheme
 
 /**
@@ -74,10 +73,6 @@ fun MapScreen(
                 onDismiss = { onIntent(MapContract.Intent.BackgroundPromptDismissed) },
                 onAutostart = { onIntent(MapContract.Intent.OpenAutostartSettings) },
             )
-        }
-
-        if (state.communityVisible) {
-            CommunityDialog(onDismiss = { onIntent(MapContract.Intent.CloseCommunity) })
         }
     }
 }

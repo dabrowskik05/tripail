@@ -72,9 +72,6 @@ class MapViewModel @Inject constructor(
             MapContract.Intent.OpenSettingsRequested ->
                 viewModelScope.launch { _effects.send(MapContract.Effect.OpenAppSettings) }
 
-            MapContract.Intent.OpenCommunity -> local.update { it.copy(communityVisible = true) }
-            MapContract.Intent.CloseCommunity -> local.update { it.copy(communityVisible = false) }
-
             MapContract.Intent.BackgroundPromptConfirmed -> {
                 val prompt = local.value.backgroundPrompt
                 local.update { it.copy(backgroundPrompt = null) }

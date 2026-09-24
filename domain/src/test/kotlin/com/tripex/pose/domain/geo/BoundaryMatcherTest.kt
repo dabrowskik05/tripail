@@ -65,6 +65,36 @@ class BoundaryMatcherTest {
         assertNull(matcher(malopolskie).match(AdminLevel.Adm1, place))
     }
 
+    @Test
+    fun `a country is found by its code even when its centre lies at sea`() = runTest {
+        val philippines = BoundaryFeature(
+            level = AdminLevel.Adm0,
+            id = "PH",
+            name = "Philippines",
+            namePl = "Filipiny",
+            countryIso2 = "PH",
+        )
+        // MapTiler's centre for the Philippines is in the Sibuyan Sea: nothing under the point.
+        val place = Place("Filipiny", 12.75, 122.73, kind = PlaceKind.Country, countryCode = "PH")
+        val matcher = BoundaryMatcher(ByIdOnly(mapOf("PH" to philippines)))
+
+        assertEquals(philippines, matcher.match(AdminLevel.Adm0, place))
+    }
+
+    /** Knows features by id and nothing by position — every point is "at sea". */
+    private class ByIdOnly(private val byId: Map<String, BoundaryFeature>) : BoundaryGeometrySource {
+        override suspend fun rings(level: AdminLevel, id: String): Result<List<Ring>> =
+            Result.success(emptyList())
+
+        override suspend fun feature(level: AdminLevel, id: String): BoundaryFeature? = byId[id]
+
+        override suspend fun featureAt(
+            level: AdminLevel,
+            lat: Double,
+            lng: Double,
+        ): BoundaryFeature? = null
+    }
+
     private class FakeBoundaries(private val hit: BoundaryFeature?) : BoundaryGeometrySource {
         override suspend fun rings(level: AdminLevel, id: String): Result<List<Ring>> =
             Result.success(emptyList())

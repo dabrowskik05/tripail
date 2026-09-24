@@ -1,10 +1,10 @@
 package com.tripex.pose.data.geo
 
 import com.tripex.pose.domain.geo.FogGeometry
-import com.tripex.pose.domain.geo.GeoBounds
 import com.tripex.pose.domain.geo.H3Config
 import com.tripex.pose.domain.geo.H3Converter
 import com.tripex.pose.domain.geo.atlas.Ring
+import com.tripex.pose.domain.geo.projection.GeometryOps
 import com.uber.h3core.H3Core
 import com.uber.h3core.util.LatLng
 import javax.inject.Inject
@@ -73,30 +73,28 @@ internal class H3Utils @Inject constructor(
         )
     }
 
+    /**
+     * Every piece of the area, each with its own holes (see [GeometryOps.polygonsOf]).
+     *
+     * This used to take the first ring as the exterior and every other ring as a hole, so a
+     * country in several pieces was measured as whichever piece came first.
+     */
     override fun cellsForPolygon(rings: List<Ring>, resolution: Int): Set<Long> {
-        if (rings.isEmpty()) return emptySet()
-        val exterior = rings.first().toLatLngRing()
-        if (exterior.size < MIN_RING_POINTS) return emptySet()
-        val holes = rings.drop(1)
-            .map { it.toLatLngRing() }
-            .filter { it.size >= MIN_RING_POINTS }
-        return runCatching { h3.polygonToCells(exterior, holes, resolution).toSet() }
-            .getOrDefault(emptySet())
+        val cells = HashSet<Long>()
+        for (polygon in GeometryOps.polygonsOf(rings)) {
+            val exterior = polygon.first().toLatLngRing()
+            if (exterior.size < MIN_RING_POINTS) continue
+            val holes = polygon.drop(1)
+                .map { it.toLatLngRing() }
+                .filter { it.size >= MIN_RING_POINTS }
+            runCatching { h3.polygonToCells(exterior, holes, resolution) }
+                .onSuccess { cells.addAll(it) }
+        }
+        return cells
     }
 
     /** Ring coordinates are `[lng, lat]` (GeoJSON order); H3 wants `LatLng(lat, lng)`. */
     private fun Ring.toLatLngRing(): List<LatLng> = map { (lng, lat) -> LatLng(lat, lng) }
-
-    override fun cellsForBounds(bounds: GeoBounds, resolution: Int): Set<Long> {
-        val ring = listOf(
-            LatLng(bounds.south, bounds.west),
-            LatLng(bounds.north, bounds.west),
-            LatLng(bounds.north, bounds.east),
-            LatLng(bounds.south, bounds.east),
-            LatLng(bounds.south, bounds.west),
-        )
-        return h3.polygonToCells(ring, emptyList(), resolution).toSet()
-    }
 
     override fun toDebugString(cell: Long): String = h3.h3ToString(cell)
 

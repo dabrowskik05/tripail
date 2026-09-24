@@ -71,6 +71,16 @@ class ResolveSearchSelectionUseCaseTest {
         assertFalse("nothing owned yet, so nothing to give back", selection.canCover)
     }
 
+    /** The map shows the city's country's regions, so the selection has to know the country. */
+    @Test
+    fun `a city knows its country, from the geocoder or else from the bundle`() = runTest {
+        val fromGeocoder = useCase()(place("Praga", PlaceKind.City).copy(countryCode = "CZ")).getOrThrow()
+        val fromBundle = useCase()(place("Warszawa", PlaceKind.City)).getOrThrow()
+
+        assertEquals("CZ", fromGeocoder.countryIso2)
+        assertEquals("PL", fromBundle.countryIso2)
+    }
+
     @Test
     fun `a region resolves to its bundle outline`() = runTest {
         val selection = useCase()(place("mazowieckie", PlaceKind.Region)).getOrThrow()

@@ -56,6 +56,8 @@ fun ContinentRoute(
         title = state.continentId?.let { stringResource(ContinentPalette.label(it)) }.orEmpty(),
         onBack = onBack,
         onTap = { viewModel.onIntent(ContinentContract.Intent.CountryTapped(it)) },
+        panel = Unit,
+        panelKey = { it },
     ) {
         PanelHint(
             text = stringResource(R.string.area_pick_country),
