@@ -56,7 +56,7 @@ Clean Architecture + MVI, five Gradle modules:
 :core     shared utilities, dispatcher qualifiers
 ```
 
-Dependency rules: `:ui → :domain`, `:data → :domain`, `:domain → nothing`.
+Dependency rules: `:ui` and `:data` depend on `:domain` and never on each other; `:core` holds shared utilities and depends on no other module.
 Room entities stop at the repository boundary.
 
 Each screen is a ViewModel with immutable `State`, `Intent`s and one-shot
@@ -116,7 +116,7 @@ usual reason tracking goes silent.
 ## Build
 
 ```bash
-git clone https://github.com/<your-account>/tripail.git
+git clone https://github.com/dabrowskik05/tripail.git
 cd tripail
 
 # local.properties
@@ -139,7 +139,7 @@ More detail: [`docs/`](docs) — map provider, H3, GPS service, geocoding.
 ## Quality
 
 - Unit tests across `:domain`, `:data` and `:ui`
-- ktlint + detekt; missing string translations fail the build
+- ktlint + detekt; missing string translations are lint errors
 - GitHub Actions CI on push / PR
 
 Open issues: [TODO.md](TODO.md).
