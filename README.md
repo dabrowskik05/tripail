@@ -2,7 +2,7 @@
 
 Android app for travellers that covers the world map in fog of war and
 permanently reveals the areas you have actually visited. Built with Kotlin,
-Jetpack Compose, Clean Architecture, Room, MapLibre, Uber H3 and MapTiler.
+Jetpack Compose, Clean Architecture, Room, MapLibre, Uber H3, OpenFreeMap and Photon.
 
 ---
 
@@ -34,7 +34,7 @@ the background.
   punched out as holes in a single GeoJSON source (never one layer per hexagon).
 - **Reveal by walking** — foreground service, ~1 km corridor along the route,
   gaps between GPS fixes bridged so a lost signal does not leave holes.
-- **Search unlock** — MapTiler geocoding; pick a result, then confirm the reveal.
+- **Search unlock** — Photon geocoding (OpenStreetMap); pick a result, then confirm the reveal.
 - **Coverage stats** — percentages per continent, country and region from the
   same spatial index used for rendering.
 - **Polish / English** — UI, map labels and geocoder follow the same setting.
@@ -75,7 +75,8 @@ Each screen is a ViewModel with immutable `State`, `Intent`s and one-shot
 | Maps | MapLibre GL Android |
 | Spatial index | Uber H3 |
 | Networking | Retrofit + kotlinx.serialization |
-| Geocoding | MapTiler (Room-backed cache) |
+| Map tiles | OpenFreeMap (no API key) |
+| Geocoding | Photon (Room-backed cache, no API key) |
 | Boundaries | Local PMTiles bundle |
 | Build | Gradle Kotlin DSL + Version Catalogs |
 
@@ -121,7 +122,6 @@ cd tripail
 
 # local.properties
 #   sdk.dir=/path/to/Android/Sdk
-#   MAPTILER_API_KEY=your_key   # optional
 
 ./gradlew assembleDebug
 ./gradlew installDebug
@@ -148,8 +148,8 @@ Open issues: [TODO.md](TODO.md).
 
 ## Attribution
 
-Map tiles: [MapTiler](https://www.maptiler.com) via [MapLibre](https://maplibre.org).  
-Geocoding © MapTiler © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright).  
+Map tiles: [OpenFreeMap](https://openfreemap.org) © [OpenMapTiles](https://www.openmaptiles.org) via [MapLibre](https://maplibre.org).  
+Geocoding: [Photon](https://photon.komoot.io) · Data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright).  
 Boundaries: [Natural Earth](https://www.naturalearthdata.com).  
 Spatial index: [Uber H3](https://h3geo.org).
 

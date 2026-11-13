@@ -9,7 +9,7 @@ import javax.inject.Inject
 /**
  * Matches a geocoder result to a feature in the local boundary bundle (M4.6).
  *
- * MapTiler ids and Natural Earth `adm1_code`s are two unrelated namespaces — comparing them
+ * Geocoder ids and Natural Earth `adm1_code`s are two unrelated namespaces — comparing them
  * directly is meaningless. The only thing both sides agree on is geography, so the match starts
  * from the result's centre and is confirmed by name.
  */

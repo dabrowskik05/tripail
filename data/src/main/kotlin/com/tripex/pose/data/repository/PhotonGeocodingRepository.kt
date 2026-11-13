@@ -2,11 +2,10 @@ package com.tripex.pose.data.repository
 
 import com.tripex.pose.core.di.IoDispatcher
 import com.tripex.pose.core.logging.Logger
-import com.tripex.pose.data.BuildConfig
 import com.tripex.pose.data.local.GeocodeCacheDao
 import com.tripex.pose.data.local.GeocodeCacheEntity
 import com.tripex.pose.data.mapper.toPlace
-import com.tripex.pose.data.network.MapTilerGeocodingApi
+import com.tripex.pose.data.network.PhotonGeocodingApi
 import com.tripex.pose.domain.geo.Place
 import com.tripex.pose.domain.repository.GeocodingRepository
 import com.tripex.pose.domain.settings.AppLanguageRepository
@@ -20,30 +19,21 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 /**
- * MapTiler-backed geocoding (M4.4 / M4.7).
+ * Photon-backed geocoding (free, no key) — replaced MapTiler in E2.
  *
- * Two things keep the request count down while typing:
+ * Request count stays low while typing:
  * - every **non-empty** result is cached in Room, so walking back a character is free and a
  *   repeated search works offline,
- * - one response is enough to disambiguate homonyms, because MapTiler ships the parent areas in
- *   `context`. There is never a follow-up request per result.
+ * - one response is enough to disambiguate homonyms, because each feature carries its county,
+ *   state and country. There is never a follow-up request per result.
  *
- * ### Two bugs this class used to have (V3.4.2)
- *
- * **Empty answers were cached for thirty days.** "norwegia" returning nothing once meant it
- * returned nothing for a month, offline and online alike, while "norwe" kept working because it
- * had been typed on the way to a result that did come back. An absence of results is not a
- * result; it is now never written.
- *
- * **Only one language was requested**, taken from the device locale. MapTiler indexes country
- * names per language, so a Polish full name could miss entirely while the prefix matched some
- * other index. Both languages are asked for, preferred one first.
+ * Empty answers are never cached: "nothing found" once must not mean "nothing found for a month".
  */
 @Singleton
-internal class MapTilerGeocodingRepository
+internal class PhotonGeocodingRepository
     @Inject
     constructor(
-        private val api: MapTilerGeocodingApi,
+        private val api: PhotonGeocodingApi,
         private val cacheDao: GeocodeCacheDao,
         private val json: Json,
         private val appLanguage: AppLanguageRepository,
@@ -63,9 +53,7 @@ internal class MapTilerGeocodingRepository
                 readCache(key)?.let { return@withContext Result.success(it) }
 
                 runCatching {
-                    val apiKey = BuildConfig.MAPTILER_API_KEY.trim()
-                    check(apiKey.isNotEmpty()) { "MAPTILER_API_KEY missing from local.properties" }
-                    api.search(query = query.trim(), key = apiKey, language = language)
+                    api.search(query = query.trim(), language = language)
                         .features
                         .mapNotNull { it.toPlace() }
                         .deduplicated()
@@ -77,15 +65,12 @@ internal class MapTilerGeocodingRepository
         override suspend fun reverseGeocode(lat: Double, lng: Double): Result<Place?> =
             withContext(ioDispatcher) {
                 runCatching {
-                    val apiKey = BuildConfig.MAPTILER_API_KEY.trim()
-                    check(apiKey.isNotEmpty()) { "MAPTILER_API_KEY missing from local.properties" }
                     val language = language()
-                    // The same object a search for the city returns, so an automatic unlock and a
-                    // manual one share an id and a bounding box — and therefore a radius. Asking
-                    // for every type at once returned the smallest hit instead ("Place de l'Ile"
-                    // in Geneva, a park in Mokotów) with a point-sized box and a minimum circle.
-                    REVERSE_TYPES.firstNotNullOfOrNull { type ->
-                        api.reverse(lng = lng, lat = lat, key = apiKey, language = language, type = type)
+                    // The same OSM object a search for the city returns, so an automatic unlock and
+                    // a manual one share an id and an extent — and therefore a radius. Without a
+                    // layer the nearest object wins: a shop or a bus stop instead of the town.
+                    REVERSE_LAYERS.firstNotNullOfOrNull { layer ->
+                        api.reverse(lat = lat, lng = lng, language = language, layer = layer)
                             .features
                             .firstNotNullOfOrNull { it.toPlace() }
                     }
@@ -100,15 +85,11 @@ internal class MapTilerGeocodingRepository
             "$CACHE_VERSION|$language|" + query.trim().lowercase()
 
         /**
-         * Follows the **app's** language, not the device's.
-         *
-         * The player can run a Polish interface on an English phone; the names in the suggestion
-         * list have to match the names on the map and in the rest of the UI. Both languages are
-         * sent, preferred one first — asking for one only is why a full Polish country name
-         * could find nothing while its prefix worked.
+         * Follows the **app's** language, not the device's, so names in the suggestion list match
+         * the rest of the UI as far as Photon allows (local names for Polish, English for English).
          */
         private suspend fun language(): String =
-            appLanguage.observe().first().geocodingLanguages
+            appLanguage.observe().first().geocoderLanguage
 
         override suspend fun search(query: String): Result<Place> =
             suggest(query).mapCatching { places ->
@@ -205,11 +186,11 @@ internal class MapTilerGeocodingRepository
 
         private companion object {
             const val MIN_QUERY_LENGTH = 2
-            const val CACHE_VERSION = "v2"
+            const val CACHE_VERSION = "v3-photon"
             const val TAG = "Geocoding"
 
-            /** Coarse to fine, in the order a forward search ranks a city's own record. */
-            val REVERSE_TYPES = listOf("municipal_district", "municipality", "place")
+            /** Settlement first; `locality` catches places Photon does not file as a city. */
+            val REVERSE_LAYERS = listOf("city", "locality")
 
             /** Roughly 5 km at mid latitudes — same place, different granularity. */
             const val DUPLICATE_DEGREES = 0.05

@@ -98,7 +98,7 @@ internal fun SearchSuggestions(
                 }
                 HorizontalDivider(color = cartoon.inkPrimary.copy(alpha = 0.08f))
             }
-            // The results come from MapTiler's geocoder over OpenStreetMap data; both ask to be
+            // The results come from Photon over OpenStreetMap data; both ask to be
             // credited wherever their results are shown.
             item(key = ATTRIBUTION_KEY) {
                 Text(

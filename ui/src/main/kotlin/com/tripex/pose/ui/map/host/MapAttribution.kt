@@ -1,6 +1,5 @@
 package com.tripex.pose.ui.map.host
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -13,31 +12,25 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.tripex.pose.ui.R
 import com.tripex.pose.ui.theme.LocalCartoonStyle
 
 /** Height of the footer line the attribution lives in, above the system navigation bar. */
 internal val MapAttributionHeight = 18.dp
 
-private val LogoHeight = 12.dp
 private const val TEXT_ALPHA = 0.55f
 
-private const val MAPTILER_URL = "https://www.maptiler.com/"
-private const val MAPTILER_COPYRIGHT_URL = "https://www.maptiler.com/copyright/"
+private const val OPENFREEMAP_URL = "https://openfreemap.org/"
+private const val OPENMAPTILES_URL = "https://www.openmaptiles.org/"
 private const val OSM_COPYRIGHT_URL = "https://www.openstreetmap.org/copyright"
 
 /**
- * What the map data's licences require on screen, as one quiet footer line.
- *
- * Both parts are required and neither can stand in for the other: the MapTiler logo by the
- * MapTiler free plan, the "© OpenStreetMap contributors" text by the OpenStreetMap licence on
- * any plan. They sit in their own strip just above the system navigation bar, under every panel,
- * instead of floating over the map — the first version, in a white pill above the panels, read
- * louder than the map itself. MapLibre's own logo is not required by its licence and is off.
+ * What the map data's licences require on screen, as one quiet footer line:
+ * "OpenFreeMap © OpenMapTiles Data from OpenStreetMap" (OpenFreeMap's requested credit; the
+ * OpenStreetMap part is required by the ODbL on any provider). It sits in its own strip just
+ * above the system navigation bar, under every panel, instead of floating over the map.
+ * MapLibre's own logo is not required by its licence and is off.
  */
 @Composable
 internal fun MapAttribution(modifier: Modifier = Modifier) {
@@ -48,20 +41,12 @@ internal fun MapAttribution(modifier: Modifier = Modifier) {
             .fillMaxWidth()
             .height(MapAttributionHeight)
             .padding(horizontal = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.End,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Image(
-            painter = painterResource(R.drawable.maptiler_logo),
-            contentDescription = stringResource(R.string.map_maptiler_logo_cd),
-            modifier = Modifier
-                .height(LogoHeight)
-                .clickable { uriHandler.openUri(MAPTILER_URL) },
-        )
-        Row {
-            AttributionLink("© MapTiler ", ink) { uriHandler.openUri(MAPTILER_COPYRIGHT_URL) }
-            AttributionLink("© OpenStreetMap contributors", ink) { uriHandler.openUri(OSM_COPYRIGHT_URL) }
-        }
+        AttributionLink("OpenFreeMap ", ink) { uriHandler.openUri(OPENFREEMAP_URL) }
+        AttributionLink("© OpenMapTiles ", ink) { uriHandler.openUri(OPENMAPTILES_URL) }
+        AttributionLink("© OpenStreetMap contributors", ink) { uriHandler.openUri(OSM_COPYRIGHT_URL) }
     }
 }
 

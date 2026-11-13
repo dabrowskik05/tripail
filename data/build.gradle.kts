@@ -1,5 +1,3 @@
-import java.util.Properties
-
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.serialization)
@@ -10,22 +8,12 @@ android {
     namespace = "com.tripex.pose.data"
     compileSdk = libs.versions.compileSdk.get().toInt()
 
-    val localProperties = Properties().apply {
-        val file = rootProject.file("local.properties")
-        if (file.exists()) file.inputStream().use { load(it) }
-    }
-
     defaultConfig {
         minSdk = libs.versions.minSdk.get().toInt()
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
         // Keep in sync with :app versionName — used for Nominatim User-Agent.
         buildConfigField("String", "VERSION_NAME", "\"0.1.0\"")
-        buildConfigField(
-            "String",
-            "MAPTILER_API_KEY",
-            "\"${localProperties.getProperty("MAPTILER_API_KEY", "")}\"",
-        )
         // Keep in sync with tools/atlas/build_boundaries.sh BOUNDARIES_VERSION.
         buildConfigField("int", "BOUNDARIES_VERSION", "4")
     }

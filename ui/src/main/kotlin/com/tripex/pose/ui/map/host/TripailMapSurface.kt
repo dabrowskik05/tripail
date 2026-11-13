@@ -65,7 +65,7 @@ private const val MAP_VIEW_STATE_KEY = "tripail_map_surface_state"
 private const val BOUNDARY_SOURCE_ID = "boundaries"
 private const val FOG_SOURCE_ID = "reveal-source"
 
-/** MapTiler's settlement layer. Stable across style versions, unlike the layer ids. */
+/** OpenMapTiles settlement layer (OpenFreeMap). Stable across style versions, unlike the layer ids. */
 private const val PLACE_SOURCE_LAYER = "place"
 
 private const val PLAYER_SOURCE_ID = "player"
@@ -447,6 +447,20 @@ private fun applyLabelPolicy(style: Style, language: AppLanguage) {
     }
 }
 
+/**
+ * Where the label block starts: the layer right after the **last** non-symbol layer.
+ *
+ * Not simply the first symbol layer — OpenFreeMap's Liberty style interleaves a few symbol
+ * layers (waterway names) with roads, bridges and buildings drawn after them. Inserting the
+ * parchment below the first symbol left those roads painted on top of the fog. `null` means the
+ * style ends with a non-symbol layer, so new layers go on top.
+ */
+private fun labelsStartId(style: Style): String? {
+    val layers = style.layers
+    val lastNonSymbol = layers.indexOfLast { it !is SymbolLayer }
+    return layers.getOrNull(lastNonSymbol + 1)?.id
+}
+
 /** Parchment between the basemap and its labels: streets vanish, place names stay readable. */
 private fun addFogLayers(style: Style, washColor: Int, edgeColor: Int, washOpacity: Float) {
     if (style.getSource(FOG_SOURCE_ID) != null) return
@@ -462,7 +476,7 @@ private fun addFogLayers(style: Style, washColor: Int, edgeColor: Int, washOpaci
         PropertyFactory.lineWidth(FOG_EDGE_WIDTH),
         PropertyFactory.lineOpacity(FOG_EDGE_OPACITY),
     )
-    val firstSymbol = style.layers.firstOrNull { it is SymbolLayer }?.id
+    val firstSymbol = labelsStartId(style)
     if (firstSymbol != null) {
         style.addLayerBelow(fill, firstSymbol)
         style.addLayerBelow(edge, firstSymbol)
@@ -480,7 +494,7 @@ private fun addBoundaryLayers(style: Style, parchmentColor: Int) {
     // Everything here goes *below* the first symbol layer, so place labels always render on top
     // of borders. Adding them at the top of the stack let white country outlines cut straight
     // through city names.
-    val firstSymbolId = style.layers.firstOrNull { it is SymbolLayer }?.id
+    val firstSymbolId = labelsStartId(style)
 
     fun add(layer: Layer) {
         if (firstSymbolId != null) style.addLayerBelow(layer, firstSymbolId) else style.addLayer(layer)
@@ -708,7 +722,7 @@ private fun MapLibreMap.countryAt(box: RectF): BoundaryTap? {
  * A settlement label or icon under the finger (V3.3.4).
  *
  * The basemap's own `place` source-layer is queried, not our boundary tiles — which is why the
- * layers are found by their **source layer** rather than by id. MapTiler's style names are not a
+ * layers are found by their **source layer** rather than by id. The style's layer ids are not a
  * stable contract and have changed between style versions; `place` is.
  */
 private fun MapLibreMap.placeAt(box: RectF): PlaceTap? {
@@ -730,7 +744,7 @@ private fun MapLibreMap.placeAt(box: RectF): PlaceTap? {
         name = name,
         latitude = point.latitude(),
         longitude = point.longitude(),
-        // `class` is MapTiler's own categorisation: city, town, village, suburb…
+        // `class` is the OpenMapTiles categorisation: city, town, village, suburb…
         placeClass = feature.str("class"),
     )
 }

@@ -1,6 +1,6 @@
 package com.tripex.pose.data.di
 
-import com.tripex.pose.data.map.MapTilerStyleProvider
+import com.tripex.pose.data.map.OpenFreeMapStyleProvider
 import com.tripex.pose.domain.map.MapStyleProvider
 import dagger.Binds
 import dagger.Module
@@ -14,5 +14,5 @@ internal abstract class MapModule {
 
     @Binds
     @Singleton
-    abstract fun bindMapStyleProvider(impl: MapTilerStyleProvider): MapStyleProvider
+    abstract fun bindMapStyleProvider(impl: OpenFreeMapStyleProvider): MapStyleProvider
 }

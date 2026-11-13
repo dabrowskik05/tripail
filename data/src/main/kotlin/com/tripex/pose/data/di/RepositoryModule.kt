@@ -1,7 +1,7 @@
 package com.tripex.pose.data.di
 
 import com.tripex.pose.data.repository.AreaStatsCacheImpl
-import com.tripex.pose.data.repository.MapTilerGeocodingRepository
+import com.tripex.pose.data.repository.PhotonGeocodingRepository
 import com.tripex.pose.data.repository.UnlockedAreaRepositoryImpl
 import com.tripex.pose.data.repository.UnlockedPlaceRepositoryImpl
 import com.tripex.pose.data.repository.UnlockedRegionRepositoryImpl
@@ -28,7 +28,7 @@ internal abstract class RepositoryModule {
 
     @Binds
     @Singleton
-    abstract fun bindGeocodingRepository(impl: MapTilerGeocodingRepository): GeocodingRepository
+    abstract fun bindGeocodingRepository(impl: PhotonGeocodingRepository): GeocodingRepository
 
     @Binds
     @Singleton

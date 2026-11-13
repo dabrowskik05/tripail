@@ -14,7 +14,7 @@ enum class AppLanguage(val tag: String) {
     ;
 
     /**
-     * Name tag to read off MapTiler's label layers, with a fallback chain.
+     * Name tag to read off the basemap's label layers (OpenMapTiles schema), with a fallback chain.
      *
      * Not every feature carries every translation, and a label that resolves to nothing renders
      * as an empty string — a nameless city is worse than one named in the wrong language.
@@ -25,13 +25,15 @@ enum class AppLanguage(val tag: String) {
             English -> listOf("name:en", "name_en", "name")
         }
 
-    /** What to ask the geocoder for. Both languages are sent, preferred one first. */
-    val geocodingLanguages: String
+    /**
+     * Language passed to the geocoder (Photon). Its public instance knows only `default` (each
+     * place's local name), `en`, `de` and `fr` — Polish is not available, so a Polish UI gets
+     * local names ("Roma", "Warszawa"), which beats English ones for a Polish speaker.
+     */
+    val geocoderLanguage: String
         get() = when (this) {
-            // "norwegia" is indexed under the Polish name, "Norway" under the English one.
-            // Asking for one language only is why a full Polish country name found nothing.
-            Polish -> "pl,en"
-            English -> "en,pl"
+            Polish -> "default"
+            English -> "en"
         }
 
     companion object {

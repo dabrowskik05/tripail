@@ -15,7 +15,7 @@
     <string name="status_tracking_active">Śledzenie aktywne — mgła odsłania się wraz z trasą.</string>
     <string name="search_placeholder">np. Warszawa</string>
     <string name="search_not_found">Nie znaleziono miejsca</string>
-    <string name="search_attribution">Wyszukiwanie © MapTiler © OpenStreetMap</string>
+    <string name="search_attribution">Wyszukiwanie: Photon · © OpenStreetMap</string>
     <string name="logo_content_description">Tripail</string>
     <string name="loading_enter">Enter</string>
     <string name="loading_preparing">Przygotowuję Twój świat…</string>
@@ -63,5 +63,4 @@
     <string name="area_back_cd">Wróć o poziom wyżej</string>
     <string name="area_pick_country">Dotknij kraju, by zobaczyć jego postęp</string>
     <string name="area_country_unknown">Tutaj nie ma kraju do wybrania</string>
-    <string name="map_maptiler_logo_cd">Logo MapTiler — otwiera maptiler.com</string>
 </resources>

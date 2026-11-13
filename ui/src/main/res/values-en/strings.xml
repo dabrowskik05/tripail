@@ -15,7 +15,7 @@
     <string name="status_tracking_active">Tracking is on — the fog lifts as you go.</string>
     <string name="search_placeholder">e.g. Warsaw</string>
     <string name="search_not_found">No place found</string>
-    <string name="search_attribution">Search © MapTiler © OpenStreetMap</string>
+    <string name="search_attribution">Search: Photon · © OpenStreetMap</string>
     <string name="logo_content_description">Tripail</string>
     <string name="loading_enter">Enter</string>
     <string name="loading_preparing">Getting your world ready…</string>
@@ -63,5 +63,4 @@
     <string name="area_back_cd">Go up one level</string>
     <string name="area_pick_country">Tap a country to see how much you have explored</string>
     <string name="area_country_unknown">There is no country to pick here</string>
-    <string name="map_maptiler_logo_cd">MapTiler logo — opens maptiler.com</string>
 </resources>

@@ -15,7 +15,7 @@ data class PlaceTap(
     val name: String,
     val latitude: Double,
     val longitude: Double,
-    /** MapTiler's own word for the settlement size: city, town, village, suburb… */
+    /** OpenMapTiles' word for the settlement size: city, town, village, suburb… */
     val placeClass: String?,
 ) {
     fun toPlace(): Place = Place(

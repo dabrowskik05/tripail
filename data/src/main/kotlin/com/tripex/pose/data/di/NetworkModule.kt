@@ -1,7 +1,7 @@
 package com.tripex.pose.data.di
 
 import com.tripex.pose.data.BuildConfig
-import com.tripex.pose.data.network.MapTilerGeocodingApi
+import com.tripex.pose.data.network.PhotonGeocodingApi
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -20,7 +20,7 @@ import retrofit2.converter.kotlinx.serialization.asConverterFactory
 @InstallIn(SingletonComponent::class)
 internal object NetworkModule {
 
-    private const val MAPTILER_BASE_URL = "https://api.maptiler.com/"
+    private const val PHOTON_BASE_URL = "https://photon.komoot.io/"
 
     @Provides
     @Singleton
@@ -58,17 +58,17 @@ internal object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideMapTilerGeocodingApi(
+    fun providePhotonGeocodingApi(
         client: OkHttpClient,
         json: Json,
-    ): MapTilerGeocodingApi {
+    ): PhotonGeocodingApi {
         val contentType = "application/json".toMediaType()
         return Retrofit.Builder()
-            .baseUrl(MAPTILER_BASE_URL)
+            .baseUrl(PHOTON_BASE_URL)
             .client(client)
             .addConverterFactory(json.asConverterFactory(contentType))
             .build()
-            .create(MapTilerGeocodingApi::class.java)
+            .create(PhotonGeocodingApi::class.java)
     }
 
 }

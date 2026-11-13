@@ -17,7 +17,7 @@ enum class PlaceKind {
 }
 
 /**
- * A geocoded place from MapTiler (or another provider).
+ * A geocoded place (Photon / OpenStreetMap, or another provider).
  */
 data class Place(
     val displayName: String,
