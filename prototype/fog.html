@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tripail mgła</title>
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@7.1.0/turf.min.js"></script>
+<style>
+  :root { --paper:#E9DDC2; --ink:#4E3B26; --card:#FBF7EE; --text:#2B2250; --accent:#4A8B80; }
+  html,body { margin:0; height:100%; background:#BCE3F7; font-family:system-ui,sans-serif; color:var(--text); }
+  #map { position:absolute; inset:0; }
+  #fx { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+  body { overflow:hidden; }
+  #panel { position:absolute; top:12px; right:12px; width:260px; max-height:calc(100% - 24px); overflow:auto;
+    background:var(--card); border-radius:14px; box-shadow:0 6px 24px #0003; padding:12px 14px; font-size:13px; }
+  #panel h1 { font-size:15px; margin:0 0 8px; }
+  #panel .sec { font-weight:600; margin:12px 0 4px; font-size:12px; text-transform:uppercase; opacity:.6; }
+  #panel label { display:flex; align-items:center; gap:8px; margin:4px 0; }
+  #panel input[type=range] { flex:1; }
+  #panel .val { width:44px; text-align:right; font-variant-numeric:tabular-nums; }
+  button { font:inherit; border:0; border-radius:10px; padding:8px 10px; margin:3px 0; width:100%;
+    background:var(--accent); color:#fff; cursor:pointer; }
+  button.ghost { background:#0000; color:var(--text); border:1px solid #2B225033; }
+  button.on { background:#2B2250; }
+  #toggle { display:none; }
+  #banner { position:absolute; left:50%; top:38%; transform:translate(-50%,-50%) scale(.9); opacity:0;
+    font-family:Georgia,serif; font-size:44px; color:var(--ink); text-shadow:0 2px 0 #fff8, 0 0 24px #fff;
+    letter-spacing:2px; pointer-events:none; transition:opacity .5s, transform .8s; }
+  #banner.show { opacity:1; transform:translate(-50%,-50%) scale(1); }
+  #hint { position:absolute; left:12px; bottom:12px; background:var(--card); border-radius:10px; padding:6px 10px;
+    font-size:12px; box-shadow:0 2px 10px #0002; }
+  @media (max-width:600px) {
+    #panel { left:12px; right:12px; width:auto; top:auto; bottom:12px; max-height:45%; }
+    #panel.closed > :not(#toggle) { display:none; }
+    #toggle { display:block; }
+    #hint { display:none; }
+  }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<canvas id="fx"></canvas>
+<div id="banner"></div>
+<div id="hint">Tryb „idź": klikaj po mapie, żeby iść pieszo</div>
+<div id="panel">
+  <button id="toggle" class="ghost">Panel ▾</button>
+  <h1>Tripail — prototyp mgły</h1>
+  <button id="drive">▶ Jedź autem do Pizy</button>
+  <button id="walk" class="ghost">🚶 Tryb „idź" (klikaj mapę)</button>
+  <button id="reset" class="ghost">↺ Od nowa</button>
+
+  <div class="sec">Szerokość (promień)</div>
+  <label>Pieszo <input id="rWalk" type="range" min="0.3" max="2" step="0.1" value="1"><span class="val"></span></label>
+  <label>Autem <input id="rCar" type="range" min="0" max="2" step="0.1" value="0.5"><span class="val"></span></label>
+  <label>Okolica <input id="rArea" type="range" min="2" max="15" step="0.5" value="6"><span class="val"></span></label>
+
+  <div class="sec">Wygląd</div>
+  <label>Lekka mgła <input id="lightOp" type="range" min="0" max="0.9" step="0.05" value="0.2"><span class="val"></span></label>
+  <label><input id="tex" type="checkbox" checked> Ziarno (faktura)</label>
+  <label><input id="ink" type="checkbox" checked> Brzeg tuszem</label>
+  <label><input id="rough" type="checkbox" checked> Postrzępiony brzeg</label>
+  <label><input id="three" type="checkbox" checked> 3 stopnie mgły</label>
+  <label><input id="patch" type="checkbox" checked> Łatanie dziur</label>
+  <label><input id="night" type="checkbox"> Tryb nocny (lampiony)</label>
+</div>
+
+<script>
+// ---------- dane startowe (Toskania) ----------
+const CITIES0 = [
+  { name:'Florencja', c:[11.2558,43.7696], r:5.5 },
+  { name:'Siena',     c:[11.3308,43.3188], r:3 },
+];
+const PISA = { name:'Piza', c:[10.4017,43.7228], r:4 };
+// pętla wokół Fiesole: zostawia dziurkę w środku (do testu łatania)
+const loop = Array.from({length:25}, (_,i) => {
+  const a = i/24*2*Math.PI;
+  return [11.33 + 0.026*Math.cos(a), 43.83 + 0.019*Math.sin(a)];
+});
+const SEGMENTS0 = [
+  { mode:'walk', pts:[[11.25,43.77],[11.27,43.78],[11.29,43.80],[11.31,43.815]] },
+  { mode:'walk', pts:loop },
+  { mode:'car',  pts:[[11.2558,43.7696],[11.25,43.70],[11.22,43.62],[11.25,43.52],[11.29,43.42],[11.3308,43.3188]] },
+  { mode:'walk', pts:[[11.33,43.318],[11.36,43.30],[11.40,43.29],[11.43,43.27]] },
+];
+const CAR_TO_PISA = [[11.2558,43.7696],[11.15,43.775],[11.05,43.76],[10.93,43.74],[10.80,43.72],[10.66,43.71],[10.53,43.715],[10.4017,43.7228]];
+
+let cities, segments, anim = null, walkMode = false;
+function resetData() {
+  cities = CITIES0.map(c => ({...c, shown:c.r}));
+  segments = SEGMENTS0.map(s => ({mode:s.mode, pts:[...s.pts]}));
+}
+resetData();
+
+const $ = id => document.getElementById(id);
+const opt = () => ({
+  rWalk:+$('rWalk').value, rCar:+$('rCar').value, rArea:+$('rArea').value,
+  lightOp:+$('lightOp').value, tex:$('tex').checked, ink:$('ink').checked, rough:$('rough').checked,
+  three:$('three').checked, patch:$('patch').checked, night:$('night').checked,
+});
+
+// ---------- geometria ----------
+const WORLD = turf.polygon([[[-180,-85],[180,-85],[180,85],[-180,85],[-180,-85]]]);
+function bufferSeg(s, r) {
+  if (r <= 0) return null;
+  const g = s.pts.length > 1 ? turf.lineString(s.pts) : turf.point(s.pts[0]);
+  return turf.buffer(g, r, {units:'kilometers', steps:12});
+}
+function unionAll(list) {
+  list = list.filter(Boolean);
+  if (!list.length) return null;
+  if (list.length === 1) return list[0];
+  return turf.union(turf.featureCollection(list));
+}
+function diff(a, b) { return b ? turf.difference(turf.featureCollection([a,b])) : a; }
+
+// usuwa małe dziurki w odkrytym terenie
+function patchHoles(f, maxKm2) {
+  if (!f) return f;
+  const polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
+  const out = polys.map(rings => [rings[0], ...rings.slice(1).filter(h => turf.area(turf.polygon([h]))/1e6 > maxKm2)]);
+  return turf.multiPolygon(out);
+}
+
+// postrzępiony brzeg: przesuwa punkty obrysu o deterministyczny „szum"
+function noise(x) { const s = Math.sin(x*12.9898)*43758.5453; return s - Math.floor(s); }
+function smoothNoise(t) { const i = Math.floor(t), f = t - i, u = f*f*(3-2*f); return noise(i)*(1-u) + noise(i+1)*u; }
+function roughen(f, ampKm) {
+  if (!f) return f;
+  const polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
+  const out = polys.map(rings => rings.map(ring => {
+    const dense = [];
+    for (let i = 0; i < ring.length - 1; i++) {
+      const a = ring[i], b = ring[i+1];
+      const d = turf.distance(a, b);
+      const n = Math.max(1, Math.ceil(d / 0.15));
+      for (let k = 0; k < n; k++) dense.push([a[0]+(b[0]-a[0])*k/n, a[1]+(b[1]-a[1])*k/n]);
+    }
+    const res = dense.map((p, i) => {
+      const prev = dense[(i - 1 + dense.length) % dense.length], next = dense[(i + 1) % dense.length];
+      const kx = Math.cos(p[1]*Math.PI/180);
+      let nx = -(next[1]-prev[1]), ny = (next[0]-prev[0])*kx;
+      const len = Math.hypot(nx, ny) || 1; nx /= len; ny /= len;
+      const key = p[0]*37.1 + p[1]*91.7;
+      const off = (smoothNoise(key*40)*0.7 + smoothNoise(key*160)*0.3 - 0.5) * 2 * ampKm / 111.32;
+      return [p[0] + nx*off/kx, p[1] + ny*off];
+    });
+    res.push(res[0]);
+    return res;
+  }));
+  return turf.multiPolygon(out);
+}
+
+function compute(o) {
+  const clearParts = [];
+  for (const s of segments) clearParts.push(bufferSeg(s, s.mode === 'walk' ? o.rWalk : o.rCar));
+  for (const c of cities) if (c.shown > 0.05) clearParts.push(turf.circle(c.c, c.shown, {units:'kilometers', steps:64}));
+  let clear = unionAll(clearParts);
+  if (o.patch) clear = patchHoles(clear, 8);
+  if (o.rough) clear = roughen(clear, 0.12);
+
+  let light = null;
+  if (o.three) {
+    const areaParts = segments.map(s => bufferSeg(s, o.rArea));
+    for (const c of cities) if (c.shown > 0.05) areaParts.push(turf.circle(c.c, c.shown + o.rArea*0.5, {units:'kilometers', steps:48}));
+    light = unionAll([...areaParts, clear]);
+    if (o.rough) light = roughen(light, 0.6);
+  }
+  const outer = light || clear;
+  const dense = outer ? diff(WORLD, outer) : WORLD;
+  const lightOnly = light && clear ? diff(light, clear) : light;
+  const fc = x => turf.featureCollection(x ? [x] : []);
+  return { dense:fc(dense), light:fc(lightOnly), clear:fc(clear) };
+}
+
+// ---------- tekstura papieru ----------
+// Drobne ziarno zamiast „papieru": wzór w MapLibre ma stały rozmiar w pikselach ekranu,
+// więc duże plamy/włókna pływają przy zoomie. Ziarno 1 px tego nie zdradza.
+function paperImage(base, amp) {
+  const S = 128, cv = document.createElement('canvas'); cv.width = cv.height = S;
+  const g = cv.getContext('2d', {willReadFrequently:true});
+  g.fillStyle = base; g.fillRect(0, 0, S, S);
+  const img = g.getImageData(0, 0, S, S), d = img.data;
+  for (let i = 0; i < S*S; i++) {
+    const v = (noise(i*7.31 + 0.5) - 0.5) * amp;
+    d[i*4] += v; d[i*4+1] += v*0.95; d[i*4+2] += v*0.85;
+  }
+  g.putImageData(img, 0, 0);
+  return g.getImageData(0, 0, S, S);
+}
+
+// mgła ciemniejsza i bardziej wyblakła niż odkryty teren, w dzień i w nocy
+const DAY = '#CBBE9F', NIGHT = '#1C2038';
+
+// ---------- mapa ----------
+const map = new maplibregl.Map({
+  container:'map', style:'https://tiles.openfreemap.org/styles/liberty',
+  center:[11.35, 43.55], zoom:8.2, attributionControl:{compact:true},
+});
+map.addControl(new maplibregl.NavigationControl({showCompass:false}), 'top-left');
+
+map.on('load', () => {
+  map.addImage('paper-day', paperImage(DAY, 22), {pixelRatio:1});
+  map.addImage('paper-night', paperImage(NIGHT, 14), {pixelRatio:1});
+  // mgła nad wszystkimi drogami/budynkami, ale pod napisami
+  const layers = map.getStyle().layers;
+  let lastNonSymbol = -1;
+  layers.forEach((l, i) => { if (l.type !== 'symbol') lastNonSymbol = i; });
+  const firstSymbol = layers[lastNonSymbol + 1]?.id;
+  const empty = {type:'FeatureCollection', features:[]};
+  for (const id of ['dense','light','clear','lanterns']) map.addSource(id, {type:'geojson', data:empty});
+
+  map.addLayer({id:'night', type:'background', paint:{'background-color':'#0E1430','background-opacity':0}}, firstSymbol);
+  map.addLayer({id:'light-fill', type:'fill', source:'light', paint:{'fill-color':'#E9DDC2','fill-opacity':0.5}}, firstSymbol);
+  map.addLayer({id:'dense-fill', type:'fill', source:'dense', paint:{'fill-color':'#E9DDC2','fill-opacity':0.97}}, firstSymbol);
+  // brzeg tuszem: szeroka miękka smuga papieru + cienka linia atramentu
+  map.addLayer({id:'ink-soft', type:'line', source:'clear', paint:{'line-color':'#E9DDC2','line-opacity':0.85,
+    'line-width':['interpolate',['linear'],['zoom'],6,6,12,26], 'line-blur':['interpolate',['linear'],['zoom'],6,5,12,22]}}, firstSymbol);
+  map.addLayer({id:'ink-wash', type:'line', source:'dense', paint:{'line-color':'#8A6A44','line-opacity':0.25,
+    'line-width':['interpolate',['linear'],['zoom'],6,2,12,7], 'line-blur':['interpolate',['linear'],['zoom'],6,1.5,12,5]}}, firstSymbol);
+  map.addLayer({id:'ink-line', type:'line', source:'dense', paint:{'line-color':'#4E3B26','line-opacity':0.6,
+    'line-width':['interpolate',['linear'],['zoom'],6,0.6,12,1.4], 'line-blur':0.4}}, firstSymbol);
+  map.addLayer({id:'dense-edge', type:'line', source:'dense', paint:{'line-color':'#E9DDC2','line-opacity':0.6,
+    'line-width':['interpolate',['linear'],['zoom'],6,3,12,16], 'line-blur':['interpolate',['linear'],['zoom'],6,3,12,14]}}, firstSymbol);
+  map.addLayer({id:'lantern-glow', type:'circle', source:'lanterns', layout:{visibility:'none'}, paint:{
+    'circle-color':'#FFB84D', 'circle-blur':1, 'circle-opacity':0.55,
+    'circle-radius':['interpolate',['exponential',2],['zoom'],6,['*',['get','r'],4],12,['*',['get','r'],256]]}});
+  map.addLayer({id:'lantern-core', type:'circle', source:'lanterns', layout:{visibility:'none'}, paint:{
+    'circle-color':'#FFE3A3', 'circle-blur':0.6, 'circle-radius':['interpolate',['linear'],['zoom'],6,4,12,10]}});
+
+  applyStyle(); render();
+});
+
+function applyStyle() {
+  const o = opt();
+  const paper = o.night ? NIGHT : DAY;
+  map.setPaintProperty('dense-fill', 'fill-pattern', o.tex ? (o.night ? 'paper-night' : 'paper-day') : null);
+  map.setPaintProperty('dense-fill', 'fill-color', paper);
+  map.setPaintProperty('dense-fill', 'fill-opacity', 0.95);
+  map.setPaintProperty('light-fill', 'fill-color', paper);
+  map.setPaintProperty('light-fill', 'fill-opacity', o.lightOp);
+  map.setPaintProperty('ink-soft', 'line-color', paper);
+  // w trybie 3 stopni miękkie przejście ma krycie lekkiej mgły, więc nie robi widocznej krawędzi
+  map.setPaintProperty('ink-soft', 'line-opacity', o.three ? o.lightOp : 0.85);
+  map.setPaintProperty('dense-edge', 'line-color', paper);
+  map.setPaintProperty('ink-line', 'line-color', o.night ? '#FFD38A' : '#4E3B26');
+  map.setPaintProperty('ink-wash', 'line-color', o.night ? '#FFB84D' : '#8A6A44');
+  for (const id of ['ink-soft','ink-wash','ink-line','dense-edge']) map.setLayoutProperty(id, 'visibility', o.ink ? 'visible' : 'none');
+  // noc: odkryty teren tylko lekko przyciemniony (mgła jest dużo ciemniejsza), nad miastami lampiony
+  map.setPaintProperty('night', 'background-opacity', o.night ? 0.25 : 0);
+  for (const id of ['lantern-glow','lantern-core']) map.setLayoutProperty(id, 'visibility', o.night ? 'visible' : 'none');
+  document.querySelectorAll('.val').forEach(s => { s.textContent = s.previousElementSibling.value + (s.previousElementSibling.id === 'lightOp' ? '' : ' km'); });
+}
+
+let pending = false;
+function render() {
+  if (pending) return; pending = true;
+  requestAnimationFrame(() => {
+    pending = false;
+    if (!map.getSource('dense')) return;
+    const g = compute(opt());
+    map.getSource('dense').setData(g.dense);
+    map.getSource('light').setData(g.light);
+    map.getSource('clear').setData(g.clear);
+    map.getSource('lanterns').setData(turf.featureCollection(
+      cities.filter(c => c.shown > 0.05).map(c => turf.point(c.c, {r:c.shown/40}))));
+  });
+}
+
+// ---------- animacje ----------
+const fx = $('fx'), ctx = fx.getContext('2d');
+function sizeFx() { fx.width = innerWidth*devicePixelRatio; fx.height = innerHeight*devicePixelRatio; }
+sizeFx(); addEventListener('resize', sizeFx);
+
+function inkBurst(lngLat) {
+  const p = map.project(lngLat), dpr = devicePixelRatio;
+  const drops = Array.from({length:70}, (_, i) => {
+    const a = noise(i*1.7)*Math.PI*2, sp = 1.5 + noise(i*3.3)*5;
+    return {x:p.x, y:p.y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp - 1.5, r:2 + noise(i*9.1)*5,
+      c:['#4E3B26','#8F75AD','#E39B3B','#4A8B80','#D95B5B'][i % 5]};
+  });
+  let t = 0;
+  (function step() {
+    t++; ctx.clearRect(0, 0, fx.width, fx.height);
+    for (const d of drops) {
+      d.x += d.vx; d.y += d.vy; d.vy += 0.06; d.vx *= 0.97; d.vy *= 0.97;
+      ctx.globalAlpha = Math.max(0, 1 - t/70);
+      ctx.fillStyle = d.c; ctx.beginPath(); ctx.arc(d.x*dpr, d.y*dpr, d.r*dpr*(1 + t/60), 0, 7); ctx.fill();
+    }
+    if (t < 70) requestAnimationFrame(step); else ctx.clearRect(0, 0, fx.width, fx.height);
+  })();
+}
+
+function revealCity(city) {
+  const c = {...city, shown:0}; cities.push(c);
+  const t0 = performance.now(), D = 1800;
+  inkBurst(c.c);
+  const b = $('banner'); b.textContent = c.name; b.classList.add('show');
+  setTimeout(() => b.classList.remove('show'), 2200);
+  (function grow(now) {
+    const k = Math.min(1, (now - t0)/D), e = 1 - Math.pow(1 - k, 3);
+    c.shown = c.r * e; render();
+    if (k < 1) requestAnimationFrame(grow);
+  })(t0);
+}
+
+function drive() {
+  if (anim) return;
+  const seg = {mode:'car', pts:[CAR_TO_PISA[0]]}; segments.push(seg);
+  const route = turf.lineString(CAR_TO_PISA), len = turf.length(route);
+  map.easeTo({center:[10.85, 43.72], zoom:8.6, duration:1200});
+  const t0 = performance.now(), D = 7000;
+  anim = true;
+  (function step(now) {
+    const k = Math.min(1, (now - t0)/D);
+    const p = turf.along(route, len*k).geometry.coordinates;
+    seg.pts.push(p); render();
+    if (k < 1) requestAnimationFrame(step);
+    else { anim = null; revealCity(PISA); }
+  })(t0);
+}
+
+// ---------- obsługa ----------
+$('drive').onclick = drive;
+$('reset').onclick = () => { resetData(); render(); };
+$('walk').onclick = () => {
+  walkMode = !walkMode; $('walk').classList.toggle('on', walkMode);
+  $('walk').textContent = walkMode ? '🚶 Tryb „idź": WŁ.' : '🚶 Tryb „idź" (klikaj mapę)';
+  map.getCanvas().style.cursor = walkMode ? 'crosshair' : '';
+};
+$('toggle').onclick = () => $('panel').classList.toggle('closed');
+map.on('click', e => {
+  if (!walkMode) return;
+  const p = [e.lngLat.lng, e.lngLat.lat];
+  let last = segments[segments.length - 1];
+  if (!last || last.mode !== 'walk' || !last.live) { last = {mode:'walk', pts:[], live:true}; segments.push(last); }
+  const prev = last.pts[last.pts.length - 1];
+  if (prev) { // płynny tunel: dosuwamy kroki co ~150 m
+    const n = Math.ceil(turf.distance(prev, p) / 0.15);
+    const t0 = performance.now();
+    (function step(now) {
+      const k = Math.min(1, (now - t0)/(n*25));
+      last.pts.push([prev[0] + (p[0]-prev[0])*k, prev[1] + (p[1]-prev[1])*k]); render();
+      if (k < 1) requestAnimationFrame(step);
+    })(t0);
+  } else { last.pts.push(p); render(); }
+});
+for (const id of ['rWalk','rCar','rArea','three','patch','rough']) $(id).addEventListener('input', () => { applyStyle(); render(); });
+for (const id of ['lightOp','tex','ink','night','three']) $(id).addEventListener('input', applyStyle);
+</script>
+</body>
+</html>
