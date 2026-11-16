@@ -10,8 +10,9 @@ import androidx.room.RoomDatabase
         UnlockedRegionEntity::class,
         GeocodeCacheEntity::class,
         UnlockedPlaceEntity::class,
+        TrailPointEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 internal abstract class TripexPoseDatabase : RoomDatabase() {
@@ -24,4 +25,6 @@ internal abstract class TripexPoseDatabase : RoomDatabase() {
     abstract fun geocodeCacheDao(): GeocodeCacheDao
 
     abstract fun unlockedPlaceDao(): UnlockedPlaceDao
+
+    abstract fun trailPointDao(): TrailPointDao
 }

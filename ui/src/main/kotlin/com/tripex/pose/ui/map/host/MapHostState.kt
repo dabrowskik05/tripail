@@ -20,8 +20,8 @@ class MapHostState {
     var scene: MapScene by mutableStateOf(MapScene())
         private set
 
-    /** Parchment geometry — world polygon with every unlocked area punched out. */
-    var fogGeoJson: String by mutableStateOf("")
+    /** The fog: dense, light and clear ground, already merged for the whole world. */
+    var fog: com.tripex.pose.domain.geo.FogLayers? by mutableStateOf(null)
         internal set
 
     /** The request the surface should apply now — the head of [pendingCamera]. */

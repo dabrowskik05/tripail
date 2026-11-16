@@ -1,204 +1,151 @@
 package com.tripex.pose.domain.usecase
 
-import com.tripex.pose.domain.geo.FogGeometry
-import com.tripex.pose.domain.geo.H3Config
-import com.tripex.pose.domain.geo.H3Converter
+import com.tripex.pose.domain.geo.TrailPoint
+import com.tripex.pose.domain.geo.TravelMode
 import com.tripex.pose.domain.location.DomainLocation
 import com.tripex.pose.domain.location.TrackingSession
-import com.tripex.pose.domain.repository.UnlockedAreaRepository
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class UnlockAreaUseCaseTest {
-    @Test
-    fun `first fix unlocks reveal disk of 7 cells`() =
-        runTest {
-            val h3 = FakeH3Converter(diskSize = 7)
-            val repo = FakeUnlockedAreaRepository()
-            val useCase = UnlockAreaUseCase(h3, repo)
 
-            val unlocked = useCase(location(1.0, 1.0), bridgeFrom = null)
+    private val h3 = FakeGridH3()
 
-            assertEquals(7, unlocked)
-            assertEquals(7, repo.unlocked.size)
-            assertTrue(h3.bridgeCalls.isEmpty())
-        }
+    private fun location(lat: Double, lng: Double) =
+        DomainLocation(lat, lng, accuracyMeters = 5f, elapsedRealtimeNanos = 0L, isMock = false)
 
-    /**
-     * The gap is filled by sweeping the reveal disk along it, not by threading single cells
-     * between the endpoints — a 25 m thread between 2 km disks photographed as separate dots.
-     */
-    @Test
-    fun `gap filling stamps overlapping disks along the segment`() =
-        runTest {
-            val h3 = FakeH3Converter(diskSize = 7)
-            val repo = FakeUnlockedAreaRepository()
-            val useCase = UnlockAreaUseCase(h3, repo)
-
-            useCase(location(1.0, 1.0), bridgeFrom = null)
-            h3.revealCalls.clear()
-            useCase(location(1.1, 1.1), bridgeFrom = fix(1.0, 1.0))
-
-            // The fix itself plus one stamp per interpolated step.
-            assertTrue("expected corridor stamps, got ${h3.revealCalls.size}", h3.revealCalls.size > 1)
-            assertTrue(h3.bridgeCalls.isEmpty())
-        }
+    private fun fix(lat: Double, lng: Double) = TrackingSession.Fix(lat, lng, 0L)
 
     @Test
-    fun `a gap too long to vouch for is left unbridged`() =
-        runTest {
-            val h3 = FakeH3Converter(diskSize = 7)
-            val repo = FakeUnlockedAreaRepository()
-            val useCase = UnlockAreaUseCase(h3, repo)
+    fun `the first fix stores one point and opens a segment`() = runTest {
+        val repo = FakeUnlockedAreaRepository()
+        val useCase = UnlockAreaUseCase(h3, repo)
 
-            // ~110 km north: far past MAX_BRIDGE_DISTANCE_M.
-            useCase(location(2.0, 1.0), bridgeFrom = fix(1.0, 1.0))
+        assertEquals(1, useCase(location(52.0, 21.0), bridgeFrom = null, atMs = 1_000L))
 
-            assertEquals("only the fix itself", 1, h3.revealCalls.size)
-        }
-
-    @Test
-    fun `a stale restored fix is not bridged to`() =
-        runTest {
-            val h3 = FakeH3Converter(diskSize = 7)
-            val repo = FakeUnlockedAreaRepository()
-            val useCase = UnlockAreaUseCase(h3, repo)
-
-            // Eleven minutes old: past BRIDGE_MAX_AGE_MS, so the caller hands over null rather
-            // than letting the trail claim a corridor nobody travelled.
-            val now = 11 * 60 * 1000L
-            val session = TrackingSession(lastFix = TrackingSession.Fix(1.0, 1.0, atMs = 0L))
-            useCase(location(1.1, 1.1), bridgeFrom = session.bridgeableFix(now))
-
-            assertEquals("only the fix itself", 1, h3.revealCalls.size)
-        }
-
-    @Test
-    fun `a fresh restored fix bridges across the restart`() =
-        runTest {
-            val h3 = FakeH3Converter(diskSize = 7)
-            val repo = FakeUnlockedAreaRepository()
-            val useCase = UnlockAreaUseCase(h3, repo)
-
-            val now = 60_000L
-            val session = TrackingSession(lastFix = TrackingSession.Fix(1.0, 1.0, atMs = 0L))
-            useCase(location(1.1, 1.1), bridgeFrom = session.bridgeableFix(now))
-
-            assertTrue("the trail must continue across a restart", h3.revealCalls.size > 1)
-        }
-
-    @Test
-    fun `duplicate unlocks do not inflate newly unlocked count`() =
-        runTest {
-            val h3 = FakeH3Converter(diskSize = 7)
-            val repo = FakeUnlockedAreaRepository()
-            val useCase = UnlockAreaUseCase(h3, repo)
-            val fix = location(1.0, 1.0)
-
-            val first = useCase(fix, bridgeFrom = null)
-            val second = useCase(fix, bridgeFrom = null)
-
-            assertEquals(7, first)
-            assertEquals(0, second)
-            assertEquals(7, repo.unlocked.size)
-        }
-
-    private fun fix(
-        lat: Double,
-        lng: Double,
-    ) = TrackingSession.Fix(latitude = lat, longitude = lng, atMs = 0L)
-
-    private fun location(
-        lat: Double,
-        lng: Double,
-    ) = DomainLocation(
-        latitude = lat,
-        longitude = lng,
-        accuracyMeters = 10f,
-        elapsedRealtimeNanos = 1_000_000_000L,
-        isMock = false,
-    )
-
-    private class FakeUnlockedAreaRepository : UnlockedAreaRepository {
-        val unlocked = linkedSetOf<Long>()
-
-        override suspend fun unlock(hexes: Set<Long>): Int {
-            val before = unlocked.size
-            unlocked += hexes
-            return unlocked.size - before
-        }
-
-        override fun observeTrail(): Flow<List<Long>> = flowOf(emptyList())
-
-        override fun observeFar(): Flow<List<Long>> = flowOf(emptyList())
-
-        override fun observeCount(): Flow<Int> = flowOf(unlocked.size)
+        val point = repo.points.single()
+        assertEquals(TravelMode.WALK, point.mode)
+        assertTrue(point.segmentId > 0)
     }
 
-    private class FakeH3Converter(
-        private val diskSize: Int,
-        private val bridgeCells: Set<Long> = emptySet(),
-    ) : H3Converter {
-        val bridgeCalls = mutableListOf<Pair<Long, Long>>()
-        val revealCalls = mutableListOf<Pair<Double, Double>>()
-        override val baseResolution: Int = H3Config.WALKING_RESOLUTION
+    @Test
+    fun `consecutive fixes share one segment`() = runTest {
+        val repo = FakeUnlockedAreaRepository()
+        val useCase = UnlockAreaUseCase(h3, repo)
 
-        override suspend fun warmUp() = Unit
+        useCase(location(52.000, 21.0), bridgeFrom = null, atMs = 1_000L)
+        useCase(location(52.001, 21.0), bridgeFrom = fix(52.000, 21.0), atMs = 2_000L)
+        useCase(location(52.002, 21.0), bridgeFrom = fix(52.001, 21.0), atMs = 3_000L)
 
-        override fun cellsForPolygon(
-            rings: List<com.tripex.pose.domain.geo.atlas.Ring>,
-            resolution: Int,
-        ): Set<Long> = emptySet()
+        assertEquals(3, repo.points.size)
+        assertEquals(1, repo.points.map { it.segmentId }.distinct().size)
+    }
 
-        override fun cellAt(
-            lat: Double,
-            lng: Double,
-        ): Long = ((lat * 1_000).toLong() shl 20) xor (lng * 1_000).toLong()
+    @Test
+    fun `standing still stores nothing`() = runTest {
+        val repo = FakeUnlockedAreaRepository()
+        val useCase = UnlockAreaUseCase(h3, repo)
 
-        override fun cellCenter(cell: Long): Pair<Double, Double> = 0.0 to 0.0
+        useCase(location(52.0, 21.0), bridgeFrom = null, atMs = 1_000L)
+        val second = useCase(location(52.0001, 21.0), bridgeFrom = fix(52.0, 21.0), atMs = 2_000L)
 
-        override fun revealDisk(
-            lat: Double,
-            lng: Double,
-            k: Int,
-        ): Set<Long> {
-            val center = cellAt(lat, lng)
-            return (0 until diskSize).map { center + it }.toSet()
-        }
+        assertEquals(0, second)
+        assertEquals(1, repo.points.size)
+    }
 
-        override fun revealAround(
-            lat: Double,
-            lng: Double,
-            radiusMeters: Double,
-        ): Set<Long> {
-            revealCalls += lat to lng
-            return revealDisk(lat, lng, k = 1)
-        }
+    @Test
+    fun `a jump too long to vouch for starts a new segment`() = runTest {
+        val repo = FakeUnlockedAreaRepository()
+        val useCase = UnlockAreaUseCase(h3, repo)
 
-        override fun bridge(
-            from: Long,
-            to: Long,
-        ): Set<Long> {
-            bridgeCalls += from to to
-            return bridgeCells
-        }
+        useCase(location(52.0, 21.0), bridgeFrom = null, atMs = 1_000L)
+        // ~110 km north, far past the bridge limit.
+        useCase(location(53.0, 21.0), bridgeFrom = fix(52.0, 21.0), atMs = 2_000L)
 
-        override fun parentOf(
-            cell: Long,
-            resolution: Int,
-        ): Long = cell
+        assertEquals(2, repo.points.size)
+        assertNotEquals(repo.points[0].segmentId, repo.points[1].segmentId)
+    }
 
-        override fun gridDistance(
-            from: Long,
-            to: Long,
-        ): Int = bridgeCells.size
+    @Test
+    fun `a mode change opens a new segment that starts where the old one ended`() = runTest {
+        val repo = FakeUnlockedAreaRepository()
+        val useCase = UnlockAreaUseCase(h3, repo)
 
-        override fun outline(cells: Collection<Long>): FogGeometry = FogGeometry.EMPTY
+        useCase(location(52.000, 21.0), bridgeFrom = null, mode = TravelMode.WALK, atMs = 1_000L)
+        useCase(location(52.004, 21.0), bridgeFrom = fix(52.000, 21.0), mode = TravelMode.VEHICLE, atMs = 2_000L)
 
-        override fun toDebugString(cell: Long): String = cell.toString()
+        val vehicle = repo.points.filter { it.mode == TravelMode.VEHICLE }
+        assertEquals(2, vehicle.size)
+        assertEquals(1, vehicle.map { it.segmentId }.distinct().size)
+        assertEquals(52.000, vehicle.first().latitude, 1e-9)
+        assertNotEquals(repo.points.first().segmentId, vehicle.first().segmentId)
+    }
+
+    @Test
+    fun `a restarted process continues from the remembered fix`() = runTest {
+        val repo = FakeUnlockedAreaRepository()
+        UnlockAreaUseCase(h3, repo)(location(52.000, 21.0), bridgeFrom = null, atMs = 1_000L)
+
+        // New instance = process was killed; the session still remembers the last fix.
+        UnlockAreaUseCase(h3, repo)(location(52.003, 21.0), bridgeFrom = fix(52.000, 21.0), atMs = 2_000L)
+
+        val second = repo.points.filter { it.segmentId == 2_000L }
+        assertEquals("the new segment starts at the old fix", listOf(52.000, 52.003), second.map { it.latitude })
+    }
+
+    @Test
+    fun `known ground is not stored again but the join points are`() = runTest {
+        val known = h3.cellAt(52.002, 21.0)
+        val repo = FakeUnlockedAreaRepository(
+            listOf(known to TrailPoint(52.002, 21.0, TravelMode.WALK, 5L, 0L)),
+        )
+        val useCase = UnlockAreaUseCase(h3, repo)
+
+        assertEquals(1, useCase(location(52.001, 21.0), bridgeFrom = null, atMs = 1_000L))
+        assertEquals(0, useCase(location(52.002, 21.0), bridgeFrom = fix(52.001, 21.0), atMs = 2_000L))
+        assertEquals(1, useCase(location(52.003, 21.0), bridgeFrom = fix(52.002, 21.0), atMs = 3_000L))
+
+        // Before: one old point. The entry closes the first line, the exit opens the second one.
+        val incoming = repo.points.filter { it.segmentId == 1_000L }.map { it.latitude }
+        val outgoing = repo.points.filter { it.segmentId == 3_000L }.map { it.latitude }
+        assertEquals(listOf(52.001, 52.002), incoming)
+        assertEquals(listOf(52.002, 52.003), outgoing)
+    }
+
+    @Test
+    fun `driven ground is not known to a walker`() = runTest {
+        val driven = h3.cellAt(52.0, 21.0)
+        val repo = FakeUnlockedAreaRepository(
+            listOf(driven to TrailPoint(52.0, 21.0, TravelMode.VEHICLE, 5L, 0L)),
+        )
+
+        assertEquals(1, UnlockAreaUseCase(h3, repo)(location(52.0, 21.0), bridgeFrom = null, atMs = 1_000L))
+    }
+
+    @Test
+    fun `single points are stand-alone and deduplicated`() = runTest {
+        val repo = FakeUnlockedAreaRepository()
+        val useCase = UnlockAreaUseCase(h3, repo)
+
+        assertEquals(1, useCase.single(52.0, 21.0, atMs = 1L))
+        assertEquals(0, useCase.single(52.0001, 21.0, atMs = 2L))
+        assertEquals(TrailPoint.SEGMENT_SINGLE, repo.points.single().segmentId)
+    }
+
+    @Test
+    fun `import drops duplicates of each other and of the trail`() = runTest {
+        val repo = FakeUnlockedAreaRepository()
+        val useCase = UnlockAreaUseCase(h3, repo)
+        useCase.single(52.0, 21.0, atMs = 1L)
+
+        val added = useCase.import(
+            listOf(Triple(52.0, 21.0, 2L), Triple(48.0, 2.0, 3L), Triple(48.0001, 2.0, 4L)),
+        )
+
+        assertEquals(1, added)
+        assertEquals(2, repo.points.size)
     }
 }

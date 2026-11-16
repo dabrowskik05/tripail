@@ -87,6 +87,7 @@ class TrackingService : Service() {
     private var lastFixAtMs: Long = 0L
     private var lastNotificationAtMs: Long = 0L
     private var wakeLock: PowerManager.WakeLock? = null
+    private val modeClassifier = com.tripex.pose.domain.location.TravelModeClassifier()
 
     /**
      * The context the notification resolves its strings against.
@@ -235,7 +236,9 @@ class TrackingService : Service() {
         }
 
         val nowMs = System.currentTimeMillis()
-        val newlyUnlocked = unlockArea(location, session.bridgeableFix(nowMs))
+        val previous = session.bridgeableFix(nowMs)
+        val mode = modeClassifier.update(previous, location, nowMs)
+        val newlyUnlocked = unlockArea(location, previous, mode, nowMs)
         lastAccepted = location
 
         val dwell = updateDwell(location, nowMs)

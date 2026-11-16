@@ -117,9 +117,11 @@ Kolejność etapów prac mieszka w `TODO.md`. Ten plik mówi
   makro *(aktualizacja 2026-09-21)*.
 - **Baza nie przechowuje geometrii.** Wiersz regionu to identyfikator, wiersz
   miasta to trzy liczby.
-- **Nie zapisujemy surowego śladu trasy** *(aktualizacja 2026-09-22)*. W bazie
-  zostają wyłącznie komórki H3 wycierające mgłę — żadnego logowania dokładnych
-  punktów lat/lng.
+- **Nie zapisujemy dokładnego śladu trasy** *(aktualizacja 2026-11-16, zastępuje
+  wersję z 2026-09-22)*. W bazie (`trail_point`) zapisujemy punkty **zaokrąglone
+  do ~150 m** (środek komórki H3 res 9) z trybem (pieszo/pojazd) i numerem
+  odcinka — nigdy surowych współrzędnych z GPS. Mgłę rysuje bufor wokół linii
+  łączącej punkty; H3 zostaje tylko do statystyk.
 - **Największą jednostką odkrywaną ręcznie jest region**
   *(aktualizacja 2026-09-22)*. Nie ma przycisku „Odkryj cały kraj" — odkrycie
   całego kraju na raz psuje sens gry. Odkrywamy maksymalnie pojedyncze regiony
@@ -134,6 +136,17 @@ Kolejność etapów prac mieszka w `TODO.md`. Ten plik mówi
 
 ## 3. Architektura wizualna mapy
 
+- **Mgła ma 3 stany** *(aktualizacja 2026-11-16)*: gęsta (papier `#CBBE9F`,
+  krycie 0.95, ciemniejsza i bardziej wyblakła niż odkryty teren), lekka
+  („byłeś w okolicy”, 6 km od śladu, krycie 0.2) i czysto (1 km pieszo,
+  0.5 km autem, całe miasta i regiony). Tusz tylko na zewnętrznej granicy;
+  między czysto a lekką mgłą żadnej linii. Brzeg lekko postrzępiony (stały
+  wzór, nie losowy). Małe dziury (< 8 km²) w środku odkrytego terenu są
+  łatane; duże nigdy. Noc: mgła granatowa `#1C2038`, brzeg złoty.
+- **Kolor kontynentu = podpis, nie farba** *(aktualizacja 2026-11-16)*: na
+  piętrach kontynentu do papieru mgły dochodzi 10 % jego koloru; odkryty teren
+  zawsze w naturalnych kolorach mapy. Opis niżej („Kolorystyka pochodna od
+  kontynentu”) jest nieaktualny w części o farbowaniu lądu i wody.
 - **Koncepcja pergaminu i dziur:**
   - Nieodkryty świat przykryty warstwą wypłowiałego pergaminu.
   - Na pergaminie widać granice państw i nazwy głównych miast (żeby wiedzieć,

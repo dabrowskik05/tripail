@@ -250,7 +250,10 @@ class ObserveAreaCoverageUseCaseTest {
         private val parents: Flow<List<Long>>,
         private val trail: Flow<List<Long>> = flowOf(emptyList()),
     ) : UnlockedAreaRepository {
-        override suspend fun unlock(hexes: Set<Long>): Int = 0
+        override suspend fun addPoint(cell: Long, point: com.tripex.pose.domain.geo.TrailPoint) = Unit
+        override suspend fun addPoints(points: List<Pair<Long, com.tripex.pose.domain.geo.TrailPoint>>) = Unit
+        override suspend fun isKnown(cell: Long, mode: com.tripex.pose.domain.geo.TravelMode) = false
+        override fun observePoints(): Flow<List<com.tripex.pose.domain.geo.TrailPoint>> = flowOf(emptyList())
         override fun observeTrail(): Flow<List<Long>> = trail
         override fun observeFar(): Flow<List<Long>> = parents
         override fun observeCount(): Flow<Int> = flowOf(0)

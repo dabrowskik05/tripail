@@ -63,7 +63,25 @@ import org.maplibre.geojson.Feature
 
 private const val MAP_VIEW_STATE_KEY = "tripail_map_surface_state"
 private const val BOUNDARY_SOURCE_ID = "boundaries"
-private const val FOG_SOURCE_ID = "reveal-source"
+private const val FOG_DENSE_SOURCE = "fog-dense"
+private const val FOG_LIGHT_SOURCE = "fog-light"
+private const val FOG_CLEAR_SOURCE = "fog-clear"
+private const val NIGHT_SHADE = "night-shade"
+private const val FOG_LIGHT_FILL = "fog-light-fill"
+private const val FOG_DENSE_FILL = "fog-dense-fill"
+private const val FOG_FAR_FILL = "fog-far-fill"
+private const val FOG_SOFT = "fog-ink-soft"
+private const val FOG_WASH = "fog-ink-wash"
+private const val FOG_INK = "fog-ink-line"
+private const val FOG_DENSE_EDGE = "fog-dense-edge"
+private const val FOG_FAR_EDGE = "fog-far-edge"
+private val FOG_LAYERS = arrayOf(
+    FOG_LIGHT_FILL, FOG_DENSE_FILL, FOG_FAR_FILL, FOG_SOFT, FOG_WASH, FOG_INK, FOG_DENSE_EDGE, FOG_FAR_EDGE,
+)
+
+/** Below this zoom the wide, soft "far" fog is shown; above [FOG_NEAR_ZOOM] the true shape. */
+private const val FOG_FAR_ZOOM = 5.6f
+private const val FOG_NEAR_ZOOM = 7f
 
 /** OpenMapTiles settlement layer (OpenFreeMap). Stable across style versions, unlike the layer ids. */
 private const val PLACE_SOURCE_LAYER = "place"
@@ -75,9 +93,6 @@ private const val PLAYER_ICON = "player-marker"
 private const val PLAYER_HALO_RADIUS = 16f
 private const val PLAYER_HALO_OPACITY = 0.25f
 private const val EMPTY_FEATURES = """{"type":"FeatureCollection","features":[]}"""
-private const val FOG_FILL = "reveal-wash"
-private const val FOG_EDGE = "reveal-edge"
-private const val BACKGROUND_LAYER = "background"
 private const val ADM0_FILL_HIT = "adm0-fill-hit"
 private const val ADM0_FILL_SELECTED = "adm0-fill-selected"
 private const val ADM0_LINE = "adm0-line"
@@ -99,13 +114,13 @@ private const val ADM1_LIFT_LINE_SHADOW = "adm1-lift-line-shadow"
  */
 private val SHADOW_COLOR = android.graphics.Color.BLACK
 private val LIFT_SHADOW_OFFSET = arrayOf(4f, 5f)
-private const val LIFT_SHADOW_OPACITY = 0.35f
+private const val LIFT_SHADOW_OPACITY = 0.12f
 private val LIFT_LINE_SHADOW_OFFSET = arrayOf(1.5f, 2f)
 private const val LIFT_LINE_SHADOW_WIDTH = 2.5f
 private const val LIFT_LINE_SHADOW_BLUR = 2.5f
 private const val LIFT_LINE_SHADOW_OPACITY = 0.3f
 /** The rest of a picked region's country, darkened; opaque enough for the shade to register. */
-private const val REST_OF_COUNTRY_OPACITY = 0.45f
+private const val REST_OF_COUNTRY_OPACITY = 0.12f
 
 /** No real feature id equals this, so it is a filter that matches nothing. */
 private const val NO_SELECTION = "\u0000none"
@@ -121,16 +136,16 @@ private const val MAX_ZOOM = 16.0
  * carry the parchment's own colour, so they read as parchment while remaining hit-testable, and
  * at this opacity the holes underneath stay clearly legible (vision §2).
  */
-private const val AREA_FILL_OPACITY = 0.22f
+private const val AREA_FILL_OPACITY = 0.04f
 
 /**
  * Parchment over the countries the player did not pick, at the country level. They stay
  * hit-testable — switching country is still one tap — but visibly step back.
  */
-private const val DIMMED_FILL_OPACITY = 0.5f
+private const val DIMMED_FILL_OPACITY = 0.3f
 
 /** The picked area: opaque enough that its lighter shade of the continent colour reads clearly. */
-private const val SELECTED_FILL_OPACITY = 0.75f
+private const val SELECTED_FILL_OPACITY = 0.14f
 
 private const val LINE_OPACITY = 0.85f
 private const val SELECTED_LINE_OPACITY = 1f
@@ -144,8 +159,6 @@ private const val LINE_WIDTH = 1f
  */
 private val BORDER_COLOR = android.graphics.Color.WHITE
 
-private const val FOG_EDGE_WIDTH = 1.2f
-private const val FOG_EDGE_OPACITY = 0.55f
 
 /**
  * Framing margins live on [CameraRequest]: a share of the viewport's shorter side, never a fixed
@@ -173,7 +186,7 @@ private val AREA_LABEL_MARKERS = listOf(
  *
  * Layer order, bottom to top:
  * 1. the live basemap,
- * 2. the parchment wash with unlocked areas punched out,
+ * 2. the fog in three states — dense paper, a light veil, clear ground — with an inked outer edge,
  * 3. translucent country / region fills and their outlines,
  * 4. the basemap's own place labels.
  */
@@ -186,6 +199,8 @@ internal fun TripailMapSurface(
     onPlaceTap: (PlaceTap) -> Unit,
     language: AppLanguage,
     modifier: Modifier = Modifier,
+    /** Dark map: navy fog, gold ink, discovered ground only slightly dimmed. */
+    night: Boolean = false,
     visible: Boolean = true,
     /** `(latitude, longitude)` of the player, or `null` when unknown — then no marker. */
     playerLocation: Pair<Double, Double>? = null,
@@ -279,7 +294,7 @@ internal fun TripailMapSurface(
             libreMap.setStyle(builder) { loaded ->
                 BoundarySurfaceMetrics.onStyleBuilt()
                 applyLabelPolicy(loaded, language)
-                addFogLayers(loaded, reveal.washColorArgb, reveal.edgeColorArgb, reveal.washOpacity)
+                addFogLayers(loaded, reveal)
                 loaded.addSource(VectorSource(BOUNDARY_SOURCE_ID, boundarySourceUri))
                 addBoundaryLayers(loaded, reveal.washColorArgb)
                 addPlayerLayers(loaded, context, cartoon.buttonPrimary.toArgb())
@@ -296,10 +311,18 @@ internal fun TripailMapSurface(
     }
 
     // Discovering ground rewrites only the wash geometry.
-    LaunchedEffect(style, host.fogGeoJson) {
+    LaunchedEffect(style, host.fog) {
         val loaded = style ?: return@LaunchedEffect
-        if (host.fogGeoJson.isEmpty()) return@LaunchedEffect
-        loaded.getSourceAs<GeoJsonSource>(FOG_SOURCE_ID)?.setGeoJson(host.fogGeoJson)
+        val fog = host.fog ?: return@LaunchedEffect
+        loaded.getSourceAs<GeoJsonSource>(FOG_DENSE_SOURCE)?.setGeoJson(fog.dense)
+        loaded.getSourceAs<GeoJsonSource>(FOG_LIGHT_SOURCE)?.setGeoJson(fog.light)
+        loaded.getSourceAs<GeoJsonSource>(FOG_CLEAR_SOURCE)?.setGeoJson(fog.clear)
+    }
+
+    // Day or night, and the continent's signature in the paper: paint only, never geometry.
+    LaunchedEffect(style, night, host.renderedScene.continentId) {
+        val loaded = style ?: return@LaunchedEffect
+        applyFogPalette(loaded, reveal, night, host.renderedScene.continentId)
     }
 
     // The player's own position — the one thing on the map that is about them right now.
@@ -461,29 +484,118 @@ private fun labelsStartId(style: Style): String? {
     return layers.getOrNull(lastNonSymbol + 1)?.id
 }
 
-/** Parchment between the basemap and its labels: streets vanish, place names stay readable. */
-private fun addFogLayers(style: Style, washColor: Int, edgeColor: Int, washOpacity: Float) {
-    if (style.getSource(FOG_SOURCE_ID) != null) return
-    style.addSource(GeoJsonSource(FOG_SOURCE_ID, """{"type":"FeatureCollection","features":[]}"""))
+private fun byZoom(vararg stops: Pair<Float, Float>): Expression = Expression.interpolate(
+    Expression.linear(),
+    Expression.zoom(),
+    *stops.map { (zoom, value) -> Expression.stop(zoom, value) }.toTypedArray(),
+)
 
-    val fill = FillLayer(FOG_FILL, FOG_SOURCE_ID).withProperties(
-        PropertyFactory.fillColor(washColor),
-        PropertyFactory.fillOpacity(washOpacity),
-        PropertyFactory.fillAntialias(true),
-    )
-    val edge = LineLayer(FOG_EDGE, FOG_SOURCE_ID).withProperties(
-        PropertyFactory.lineColor(edgeColor),
-        PropertyFactory.lineWidth(FOG_EDGE_WIDTH),
-        PropertyFactory.lineOpacity(FOG_EDGE_OPACITY),
+/** Fades a layer in as the camera comes close ([near] = true) or out ([near] = false). */
+private fun lodOpacity(value: Float, near: Boolean): Expression =
+    if (near) byZoom(FOG_FAR_ZOOM to 0f, FOG_NEAR_ZOOM to value) else byZoom(FOG_FAR_ZOOM to value, FOG_NEAR_ZOOM to 0f)
+
+private fun lod(name: String): Expression = Expression.eq(Expression.get("lod"), Expression.literal(name))
+
+/**
+ * The fog, between the basemap and its labels: streets vanish, place names stay readable.
+ *
+ * Three states — dense paper, a faint veil where the player has been nearby, and clear ground —
+ * with the outer border drawn like ink soaking into paper. The border between clear ground and
+ * the veil has **no line at all**, only a soft gradient: a visible edge there was the one thing
+ * that bothered most in the prototype.
+ *
+ * Zoomed out, the true shape (hair-thin on a country view) cross-fades into a much wider one.
+ */
+private fun addFogLayers(style: Style, reveal: com.tripex.pose.ui.theme.RevealStyle) {
+    if (style.getSource(FOG_DENSE_SOURCE) != null) return
+    for (id in arrayOf(FOG_DENSE_SOURCE, FOG_LIGHT_SOURCE, FOG_CLEAR_SOURCE)) {
+        style.addSource(GeoJsonSource(id, EMPTY_FEATURES))
+    }
+    val paper = reveal.paperDay
+    val layers = listOf(
+        BackgroundLayer(NIGHT_SHADE).withProperties(
+            PropertyFactory.backgroundColor(reveal.nightShade),
+            PropertyFactory.backgroundOpacity(0f),
+        ),
+        FillLayer(FOG_LIGHT_FILL, FOG_LIGHT_SOURCE).withProperties(
+            PropertyFactory.fillColor(paper),
+            PropertyFactory.fillOpacity(lodOpacity(reveal.lightOpacity, near = true)),
+        ),
+        FillLayer(FOG_DENSE_FILL, FOG_DENSE_SOURCE).withFilter(lod("near")).withProperties(
+            PropertyFactory.fillColor(paper),
+            PropertyFactory.fillOpacity(lodOpacity(reveal.denseOpacity, near = true)),
+        ),
+        FillLayer(FOG_FAR_FILL, FOG_DENSE_SOURCE).withFilter(lod("far")).withProperties(
+            PropertyFactory.fillColor(paper),
+            PropertyFactory.fillOpacity(lodOpacity(reveal.denseOpacity, near = false)),
+        ),
+        // Clear ground melts into the veil: a blurred band of paper at the veil's own strength.
+        LineLayer(FOG_SOFT, FOG_CLEAR_SOURCE).withProperties(
+            PropertyFactory.lineColor(paper),
+            PropertyFactory.lineOpacity(lodOpacity(reveal.lightOpacity, near = true)),
+            PropertyFactory.lineWidth(byZoom(6f to 6f, 12f to 26f)),
+            PropertyFactory.lineBlur(byZoom(6f to 5f, 12f to 22f)),
+        ),
+        LineLayer(FOG_WASH, FOG_DENSE_SOURCE).withFilter(lod("near")).withProperties(
+            PropertyFactory.lineColor(reveal.inkWashDay),
+            PropertyFactory.lineOpacity(lodOpacity(0.25f, near = true)),
+            PropertyFactory.lineWidth(byZoom(6f to 2f, 12f to 7f)),
+            PropertyFactory.lineBlur(byZoom(6f to 1.5f, 12f to 5f)),
+        ),
+        LineLayer(FOG_INK, FOG_DENSE_SOURCE).withFilter(lod("near")).withProperties(
+            PropertyFactory.lineColor(reveal.inkDay),
+            PropertyFactory.lineOpacity(lodOpacity(0.6f, near = true)),
+            PropertyFactory.lineWidth(byZoom(6f to 0.6f, 12f to 1.4f)),
+            PropertyFactory.lineBlur(0.4f),
+        ),
+        LineLayer(FOG_DENSE_EDGE, FOG_DENSE_SOURCE).withFilter(lod("near")).withProperties(
+            PropertyFactory.lineColor(paper),
+            PropertyFactory.lineOpacity(lodOpacity(0.6f, near = true)),
+            PropertyFactory.lineWidth(byZoom(6f to 3f, 12f to 16f)),
+            PropertyFactory.lineBlur(byZoom(6f to 3f, 12f to 14f)),
+        ),
+        LineLayer(FOG_FAR_EDGE, FOG_DENSE_SOURCE).withFilter(lod("far")).withProperties(
+            PropertyFactory.lineColor(paper),
+            PropertyFactory.lineOpacity(lodOpacity(0.7f, near = false)),
+            PropertyFactory.lineWidth(byZoom(2f to 4f, 6f to 14f)),
+            PropertyFactory.lineBlur(byZoom(2f to 4f, 6f to 14f)),
+        ),
     )
     val firstSymbol = labelsStartId(style)
-    if (firstSymbol != null) {
-        style.addLayerBelow(fill, firstSymbol)
-        style.addLayerBelow(edge, firstSymbol)
-    } else {
-        style.addLayer(fill)
-        style.addLayer(edge)
+    for (layer in layers) {
+        if (firstSymbol != null) style.addLayerBelow(layer, firstSymbol) else style.addLayer(layer)
     }
+}
+
+/**
+ * Recolours the fog for day or night and mixes in a little of the continent's colour.
+ *
+ * No texture: a `fill-pattern` on these layers made MapLibre Android skip the fill entirely, so the
+ * fog is a flat colour. Real paper is the shader's job (E13).
+ */
+private fun applyFogPalette(
+    style: Style,
+    reveal: com.tripex.pose.ui.theme.RevealStyle,
+    night: Boolean,
+    continentId: String?,
+) {
+    val continent = continentId?.let { runCatching { ContinentId.valueOf(it) }.getOrNull() }
+    val base = reveal.paper(night)
+    val paper = if (continent == null || continent == ContinentId.Antarctica) {
+        base
+    } else {
+        androidx.core.graphics.ColorUtils.blendARGB(base, ContinentPalette.fill(continent).toArgb(), reveal.continentTint)
+    }
+    (style.getLayer(NIGHT_SHADE) as? BackgroundLayer)
+        ?.setProperties(PropertyFactory.backgroundOpacity(if (night) reveal.nightShadeOpacity else 0f))
+    for (id in arrayOf(FOG_DENSE_FILL, FOG_FAR_FILL, FOG_LIGHT_FILL)) {
+        (style.getLayer(id) as? FillLayer)?.setProperties(PropertyFactory.fillColor(paper))
+    }
+    for (id in arrayOf(FOG_SOFT, FOG_DENSE_EDGE, FOG_FAR_EDGE)) {
+        (style.getLayer(id) as? LineLayer)?.setProperties(PropertyFactory.lineColor(paper))
+    }
+    (style.getLayer(FOG_INK) as? LineLayer)?.setProperties(PropertyFactory.lineColor(reveal.ink(night)))
+    (style.getLayer(FOG_WASH) as? LineLayer)?.setProperties(PropertyFactory.lineColor(reveal.inkWash(night)))
 }
 
 /**
@@ -609,7 +721,7 @@ private fun applyScene(style: Style, scene: MapScene) {
     // Country borders stay visible even while exploring — vision §2 keeps them on the parchment.
     style.show(
         ADM0_FILL_HIT, ADM0_LIFT_SHADOW, ADM0_FILL_SELECTED, ADM0_LIFT_LINE_SHADOW, ADM0_LINE,
-        ADM0_LINE_SELECTED, FOG_FILL, FOG_EDGE,
+        ADM0_LINE_SELECTED,
     )
 }
 
@@ -623,8 +735,6 @@ private fun applyContinentTint(style: Style, scene: MapScene) {
     val id = scene.continentId?.let { runCatching { ContinentId.valueOf(it) }.getOrNull() }
     val tints = ContinentPalette.mapTints(id)
 
-    (style.getLayer(FOG_FILL) as? FillLayer)
-        ?.setProperties(PropertyFactory.fillColor(tints.parchment.toArgb()))
     (style.getLayer(ADM0_FILL_HIT) as? FillLayer)
         ?.setProperties(PropertyFactory.fillColor(tints.land.toArgb()))
     // A picked region stands out twice: lighter itself, and the rest of its country darker.
@@ -644,8 +754,6 @@ private fun applyContinentTint(style: Style, scene: MapScene) {
         PropertyFactory.fillColor(hitColor),
         PropertyFactory.fillOpacity(if (regionPicked) REST_OF_COUNTRY_OPACITY else AREA_FILL_OPACITY),
     )
-    (style.getLayer(BACKGROUND_LAYER) as? BackgroundLayer)
-        ?.setProperties(PropertyFactory.backgroundColor(tints.water.toArgb()))
 
     val highlight = tints.selected.toArgb()
     (style.getLayer(ADM0_FILL_SELECTED) as? FillLayer)

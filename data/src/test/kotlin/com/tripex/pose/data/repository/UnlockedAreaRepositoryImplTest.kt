@@ -1,80 +1,92 @@
 package com.tripex.pose.data.repository
 
-import com.tripex.pose.data.local.UnlockedHexDao
-import com.tripex.pose.data.local.UnlockedHexEntity
-import com.tripex.pose.domain.geo.FogGeometry
+import android.content.Context
+import androidx.room.Room
+import androidx.test.core.app.ApplicationProvider
+import com.tripex.pose.data.geo.H3Utils
+import com.tripex.pose.data.local.TripexPoseDatabase
 import com.tripex.pose.domain.geo.H3Config
-import com.tripex.pose.domain.geo.H3Converter
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.test.StandardTestDispatcher
+import com.tripex.pose.domain.geo.TrailPoint
+import com.tripex.pose.domain.geo.TravelMode
+import com.uber.h3core.H3Core
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
-@OptIn(ExperimentalCoroutinesApi::class)
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class UnlockedAreaRepositoryImplTest {
 
-    private val dispatcher = StandardTestDispatcher()
+    private lateinit var database: TripexPoseDatabase
+    private lateinit var repository: UnlockedAreaRepositoryImpl
+    private val h3 = H3Utils(H3Core.newInstance())
+
+    @Before
+    fun setUp() {
+        val context: Context = ApplicationProvider.getApplicationContext()
+        database = Room.inMemoryDatabaseBuilder(context, TripexPoseDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+        repository = UnlockedAreaRepositoryImpl(database.trailPointDao(), h3, Dispatchers.Unconfined)
+    }
+
+    @After
+    fun tearDown() {
+        database.close()
+    }
+
+    private fun cellOf(lat: Double, lng: Double) = h3.parentOf(h3.cellAt(lat, lng), H3Config.TRAIL_RESOLUTION)
+
+    private fun point(lat: Double, lng: Double, mode: TravelMode, segment: Long) =
+        TrailPoint(lat, lng, mode, segment, discoveredAt = 1L)
 
     @Test
-    fun `unlock returns count of newly inserted rows`() = runTest(dispatcher) {
-        val dao = FakeUnlockedHexDao()
-        val repo = UnlockedAreaRepositoryImpl(dao, FakeH3(), dispatcher)
+    fun `walked ground is known to everyone, driven ground only to drivers`() = runTest {
+        val walked = cellOf(52.2297, 21.0122)
+        val driven = cellOf(52.30, 21.20)
+        repository.addPoint(walked, point(52.2297, 21.0122, TravelMode.WALK, 1L))
+        repository.addPoint(driven, point(52.30, 21.20, TravelMode.VEHICLE, 2L))
 
-        val first = repo.unlock(setOf(1L, 2L, 3L))
-        val second = repo.unlock(setOf(2L, 3L, 4L))
-
-        assertEquals(3, first)
-        assertEquals(1, second)
-        assertEquals(setOf(1L, 2L, 3L, 4L), dao.stored.keys)
+        assertTrue(repository.isKnown(walked, TravelMode.WALK))
+        assertTrue(repository.isKnown(walked, TravelMode.VEHICLE))
+        assertFalse(repository.isKnown(driven, TravelMode.WALK))
+        assertTrue(repository.isKnown(driven, TravelMode.VEHICLE))
     }
 
     @Test
-    fun `unlock of empty set is zero`() = runTest(dispatcher) {
-        val repo = UnlockedAreaRepositoryImpl(FakeUnlockedHexDao(), FakeH3(), dispatcher)
-        assertEquals(0, repo.unlock(emptySet()))
+    fun `points come back grouped by segment with their mode`() = runTest {
+        repository.addPoint(cellOf(50.0, 19.0), point(50.0, 19.0, TravelMode.VEHICLE, 2L))
+        repository.addPoint(cellOf(52.0, 21.0), point(52.0, 21.0, TravelMode.WALK, 1L))
+        repository.addPoint(cellOf(50.01, 19.0), point(50.01, 19.0, TravelMode.VEHICLE, 2L))
+
+        val points = repository.observePoints().first()
+
+        assertEquals(listOf(1L, 2L, 2L), points.map { it.segmentId })
+        assertEquals(listOf(TravelMode.WALK, TravelMode.VEHICLE, TravelMode.VEHICLE), points.map { it.mode })
+        assertEquals(listOf(50.0, 50.01), points.drop(1).map { it.latitude })
     }
 
-    private class FakeUnlockedHexDao : UnlockedHexDao {
-        val stored = LinkedHashMap<Long, UnlockedHexEntity>()
-        private val count = MutableStateFlow(0)
+    @Test
+    fun `statistics count each cell once`() = runTest {
+        val cell = cellOf(52.0, 21.0)
+        repository.addPoints(
+            listOf(
+                cell to point(52.0, 21.0, TravelMode.WALK, 1L),
+                cell to point(52.0, 21.0, TravelMode.VEHICLE, 2L),
+            ),
+        )
 
-        override suspend fun insertAll(hexes: List<UnlockedHexEntity>): List<Long> =
-            hexes.map { entity ->
-                if (stored.containsKey(entity.h3Index)) {
-                    -1L
-                } else {
-                    stored[entity.h3Index] = entity
-                    count.value = stored.size
-                    entity.h3Index
-                }
-            }
-
-        override fun observeTrail(): Flow<List<Long>> = flowOf(emptyList())
-        override fun observeFar(): Flow<List<Long>> = flowOf(emptyList())
-        override fun observeCount(): Flow<Int> = count
-    }
-
-    private class FakeH3 : H3Converter {
-        override val baseResolution: Int = H3Config.WALKING_RESOLUTION
-
-        override suspend fun warmUp() = Unit
-
-        override fun cellsForPolygon(
-            rings: List<com.tripex.pose.domain.geo.atlas.Ring>,
-            resolution: Int,
-        ): Set<Long> = emptySet()
-        override fun cellAt(lat: Double, lng: Double): Long = 0L
-        override fun cellCenter(cell: Long): Pair<Double, Double> = 0.0 to 0.0
-        override fun revealDisk(lat: Double, lng: Double, k: Int): Set<Long> = emptySet()
-        override fun revealAround(lat: Double, lng: Double, radiusMeters: Double): Set<Long> = emptySet()
-        override fun bridge(from: Long, to: Long): Set<Long> = emptySet()
-        override fun parentOf(cell: Long, resolution: Int): Long = cell / 10
-        override fun gridDistance(from: Long, to: Long): Int = 0
-        override fun outline(cells: Collection<Long>): FogGeometry = FogGeometry.EMPTY
-        override fun toDebugString(cell: Long): String = cell.toString()
+        assertEquals(1, repository.observeCount().first())
+        assertEquals(listOf(cell), repository.observeTrail().first())
+        assertEquals(listOf(h3.parentOf(cell, H3Config.COARSE_RESOLUTION)), repository.observeFar().first())
     }
 }

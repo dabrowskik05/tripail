@@ -24,17 +24,22 @@ internal object DatabaseModule {
     @Singleton
     fun provideDatabase(
         @ApplicationContext context: Context,
+        h3: com.tripex.pose.domain.geo.H3Converter,
     ): TripexPoseDatabase =
         Room.databaseBuilder(
             context,
             TripexPoseDatabase::class.java,
             "tripex_pose.db",
-        ).addMigrations(*Migrations.ALL)
+        ).addMigrations(*Migrations.all(h3::cellCenter))
             .build()
 
     @Provides
     fun provideUnlockedHexDao(database: TripexPoseDatabase): UnlockedHexDao =
         database.unlockedHexDao()
+
+    @Provides
+    fun provideTrailPointDao(database: TripexPoseDatabase): com.tripex.pose.data.local.TrailPointDao =
+        database.trailPointDao()
 
     @Provides
     fun provideAreaStatsDao(database: TripexPoseDatabase): AreaStatsDao =

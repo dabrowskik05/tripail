@@ -43,7 +43,7 @@ class MapHostViewModel @Inject constructor(
     val boundarySourceUri: StateFlow<String> = _boundarySourceUri.asStateFlow()
 
     private val _fogGeoJson = MutableStateFlow(observeFogGeoJson.emptyWorld())
-    val fogGeoJson: StateFlow<String> = _fogGeoJson.asStateFlow()
+    val fogGeoJson: StateFlow<com.tripex.pose.domain.geo.FogLayers> = _fogGeoJson.asStateFlow()
 
     init {
         viewModelScope.launch {

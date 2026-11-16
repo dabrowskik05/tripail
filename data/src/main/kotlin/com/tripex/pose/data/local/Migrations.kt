@@ -98,6 +98,59 @@ internal object Migrations {
         }
     }
 
-    val ALL: Array<Migration> =
-        arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+    /**
+     * The trail becomes a list of points instead of hexagon cells.
+     *
+     * Every distinct resolution-9 cell of the old trail turns into one `LEGACY` point at the
+     * cell's centre — nothing the player discovered is lost. The old table is left in place on
+     * purpose; it is dropped in a later version, once this one has proved itself.
+     *
+     * @param cellCenter `(latitude, longitude)` of a cell — the one thing SQL cannot compute.
+     */
+    fun migration6To7(cellCenter: (Long) -> Pair<Double, Double>) = object : Migration(6, 7) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `trail_point` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `cell9` INTEGER NOT NULL,
+                    `latitude` REAL NOT NULL,
+                    `longitude` REAL NOT NULL,
+                    `mode` TEXT NOT NULL,
+                    `segmentId` INTEGER NOT NULL,
+                    `parentRes7` INTEGER NOT NULL,
+                    `discoveredAt` INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_trail_point_cell9` ON `trail_point` (`cell9`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_trail_point_parentRes7` ON `trail_point` (`parentRes7`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_trail_point_segmentId` ON `trail_point` (`segmentId`)")
+
+            val insert = db.compileStatement(
+                "INSERT INTO `trail_point` (`cell9`,`latitude`,`longitude`,`mode`,`segmentId`,`parentRes7`,`discoveredAt`) " +
+                    "VALUES (?,?,?,'LEGACY',0,?,?)",
+            )
+            db.query(
+                "SELECT parentRes9, MIN(parentRes7), MIN(discoveredAt) FROM unlocked_hex GROUP BY parentRes9",
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val cell = cursor.getLong(0)
+                    val (latitude, longitude) = runCatching { cellCenter(cell) }.getOrNull() ?: continue
+                    insert.clearBindings()
+                    insert.bindLong(1, cell)
+                    insert.bindDouble(2, latitude)
+                    insert.bindDouble(3, longitude)
+                    insert.bindLong(4, cursor.getLong(1))
+                    insert.bindLong(5, cursor.getLong(2))
+                    insert.executeInsert()
+                }
+            }
+        }
+    }
+
+    fun all(cellCenter: (Long) -> Pair<Double, Double>): Array<Migration> = arrayOf(
+        MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
+        migration6To7(cellCenter),
+    )
 }

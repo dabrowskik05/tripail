@@ -118,7 +118,7 @@ private fun TripailContent(language: AppLanguage) {
     val searchState by searchViewModel.state.collectAsStateWithLifecycle()
     val backStackEntry by navController.currentBackStackEntryAsState()
 
-    LaunchedEffect(fogGeoJson) { mapHost.fogGeoJson = fogGeoJson }
+    LaunchedEffect(fogGeoJson) { mapHost.fog = fogGeoJson }
 
     LaunchedEffect(searchViewModel) {
         searchViewModel.effects.collectLatest { effect ->
@@ -200,6 +200,7 @@ private fun TripailContent(language: AppLanguage) {
                     searchViewModel.onIntent(SearchContract.Intent.PlacePicked(place.toPlace()))
                 },
                 language = language,
+                night = androidx.compose.foundation.isSystemInDarkTheme(),
                 visible = showsMap || mapAlpha > 0f,
                 playerLocation = playerLocation,
                 // The map stops above the footer: under Samsung's buttons nothing on it could be
